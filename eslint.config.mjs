@@ -22,6 +22,18 @@ export default defineConfig([
       'import/no-cycle': ['error', { ignoreExternal: true }],
     },
   },
+  {
+    files: ['**/*.mjs', '**/*.cjs', 'server.mjs'],
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        URL: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+      },
+    },
+  },
   globalIgnores([
     'dist/**',
     'dist-server/**',

@@ -12,7 +12,15 @@ __pycache__/
 *.egg-info/
 /.env
 .env
+.env.local
+.env.*.local
 .cozeproj/reduction
+.preview
+scratch/*
+!scratch/.gitkeep
+*.test.ts
+*.test.tsx
+coverage/
 
 # JS/TS bundlers & build outputs
 .next
