@@ -105,6 +105,7 @@ export function AddWork() {
         shotAt,
         locationId: effectiveLocationId,
         coverMediaId: media[coverIndex]?.id ?? null,
+        mediaCount: media.length,
         media,
         facetValues: [
           ...selectedStyles.map(s => ({ id: `fv-${s}`, dimensionId: 'style', parentId: null, name: s, sortOrder: 0, createdAt: '', updatedAt: '' })),
@@ -120,7 +121,8 @@ export function AddWork() {
         locationId: effectiveLocationId,
         coverMediaId: media[coverIndex]?.id ?? null,
         isFavorite: false,
-        location: newLocationName.trim() ? { id: effectiveLocationId, name: newLocationName.trim(), country: '', province: '', city: '', area: '', revision: 1, createdAt: '', updatedAt: '' } : null,
+        mediaCount: media.length,
+        location: newLocationName.trim() ? { id: effectiveLocationId, name: newLocationName.trim(), country: '', province: '', city: '', area: '', revision: 1, syncStatus: 'local' as const, isDemo: false, createdAt: '', updatedAt: '' } : null,
         media,
         facetValues: [
           ...selectedStyles.map(s => ({ id: `fv-${s}`, dimensionId: 'style', parentId: null, name: s, sortOrder: 0, createdAt: '', updatedAt: '' })),

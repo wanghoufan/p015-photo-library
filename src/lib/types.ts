@@ -1,6 +1,7 @@
 export type Orientation = 'landscape' | 'portrait' | 'square';
 
-export type SyncStatus = 'local_only' | 'syncing' | 'synced' | 'sync_failed' | 'conflict';
+// 同步状态：参考 place-journal 的命名
+export type SyncStatus = 'local' | 'syncing' | 'synced' | 'failed' | 'conflict';
 
 export type UploadStatus = 'pending' | 'uploading' | 'uploaded' | 'failed';
 
@@ -12,9 +13,12 @@ export interface Work {
   locationId: string;
   coverMediaId: string | null;
   isFavorite: boolean;
+  mediaCount: number;
+  tags: string[];
   revision: number;
-  baseRevision: number;
+  baseRevision?: number;
   syncStatus: SyncStatus;
+  syncError?: string;
   isDemo: boolean;
   createdAt: string;
   updatedAt: string;
@@ -46,6 +50,9 @@ export interface Location {
   city: string;
   area: string;
   revision: number;
+  baseRevision?: number;
+  syncStatus: SyncStatus;
+  isDemo: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -79,7 +86,6 @@ export interface WorkWithRelations extends Work {
   location: Location | null;
   media: MediaAsset[];
   facetValues: FacetValue[];
-  tags: string[];
 }
 
 export interface FacetDefinition {
@@ -128,7 +134,3 @@ export interface AppMeta {
 }
 
 export type ViewMode = 'grid' | 'masonry';
-
-export interface DemoFlag {
-  isDemo: true;
-}

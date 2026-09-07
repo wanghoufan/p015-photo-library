@@ -1,3 +1,5 @@
+// 本地优先数据层：IndexedDB（idb）+ 响应式通知
+// 参考 place-journal 的成熟模式：subscribe/getVersion/bump 响应式通知
 import { openDB, type IDBPDatabase } from 'idb';
 import type { Work, MediaAsset, Location, FacetDimension, FacetValue, WorkFacetValue, OutboxEntry, AppMeta } from './types';
 
@@ -53,6 +55,26 @@ export async function getDB(): Promise<IDBPDatabase<PhotoLibraryDB>> {
   return dbInstance;
 }
 
+// ---- 响应式通知 ----
+const listeners = new Set<() => void>();
+let version = 0;
+
+export function subscribe(fn: () => void): () => void {
+  listeners.add(fn);
+  return () => { listeners.delete(fn); };
+}
+
+export function getVersion(): number {
+  return version;
+}
+
+function bump(): void {
+  version++;
+  for (const listener of listeners) {
+    listener();
+  }
+}
+
 // Works
 export async function getAllWorks(): Promise<Work[]> {
   const db = await getDB();
@@ -67,6 +89,7 @@ export async function getWork(id: string): Promise<Work | undefined> {
 export async function putWork(work: Work): Promise<void> {
   const db = await getDB();
   await db.put('works', work);
+  bump();
 }
 
 export async function deleteWork(id: string): Promise<void> {
@@ -90,6 +113,7 @@ export async function deleteWork(id: string): Promise<void> {
     await cursor.delete();
   }
   await tx.done;
+  bump();
 }
 
 // Media
@@ -98,9 +122,15 @@ export async function getMediaByWork(workId: string): Promise<MediaAsset[]> {
   return db.getAllFromIndex('media', 'by-work', workId);
 }
 
+export async function getAllMedia(): Promise<MediaAsset[]> {
+  const db = await getDB();
+  return db.getAll('media');
+}
+
 export async function putMedia(media: MediaAsset): Promise<void> {
   const db = await getDB();
   await db.put('media', media);
+  bump();
 }
 
 // Locations
@@ -112,6 +142,7 @@ export async function getAllLocations(): Promise<Location[]> {
 export async function putLocation(location: Location): Promise<void> {
   const db = await getDB();
   await db.put('locations', location);
+  bump();
 }
 
 // Facet dimensions
@@ -123,6 +154,7 @@ export async function getAllFacetDimensions(): Promise<FacetDimension[]> {
 export async function putFacetDimension(dim: FacetDimension): Promise<void> {
   const db = await getDB();
   await db.put('facet_dimensions', dim);
+  bump();
 }
 
 // Facet values
@@ -139,6 +171,7 @@ export async function getFacetValuesByDimension(dimensionId: string): Promise<Fa
 export async function putFacetValue(value: FacetValue): Promise<void> {
   const db = await getDB();
   await db.put('facet_values', value);
+  bump();
 }
 
 // Work-Facet-Values
@@ -150,6 +183,7 @@ export async function getWorkFacetValues(workId: string): Promise<WorkFacetValue
 export async function putWorkFacetValue(wfv: WorkFacetValue): Promise<void> {
   const db = await getDB();
   await db.put('work_facet_values', wfv);
+  bump();
 }
 
 export async function deleteWorkFacetValues(workId: string): Promise<void> {
@@ -160,6 +194,7 @@ export async function deleteWorkFacetValues(workId: string): Promise<void> {
     await cursor.delete();
   }
   await tx.done;
+  bump();
 }
 
 // Outbox
@@ -171,11 +206,13 @@ export async function getAllOutboxEntries(): Promise<OutboxEntry[]> {
 export async function putOutboxEntry(entry: OutboxEntry): Promise<void> {
   const db = await getDB();
   await db.put('outbox', entry);
+  bump();
 }
 
 export async function deleteOutboxEntry(id: string): Promise<void> {
   const db = await getDB();
   await db.delete('outbox', id);
+  bump();
 }
 
 // Meta
@@ -188,6 +225,7 @@ export async function getMeta(key: string): Promise<string | null> {
 export async function setMeta(key: string, value: string): Promise<void> {
   const db = await getDB();
   await db.put('meta', { key, value, updatedAt: new Date().toISOString() });
+  bump();
 }
 
 // Clear all demo data
@@ -200,6 +238,7 @@ export async function clearDemoData(): Promise<void> {
     await cursor.delete();
   }
   await tx.done;
+  bump();
 }
 
 // Clear all data
@@ -214,4 +253,59 @@ export async function clearAllData(): Promise<void> {
     await tx.objectStore(name).clear();
   }
   await tx.done;
+  bump();
 }
+
+// ---- Repo 模式：封装业务操作 ----
+// 参考 place-journal 的 repo 模式，提供高层业务接口
+export const repo = {
+  async saveWork(work: Work): Promise<void> {
+    const now = new Date().toISOString();
+    const updatedWork = {
+      ...work,
+      revision: (work.revision ?? 0) + 1,
+      syncStatus: 'local' as const,
+      updatedAt: now,
+    };
+    await putWork(updatedWork);
+  },
+
+  async saveLocation(location: Location): Promise<void> {
+    const now = new Date().toISOString();
+    const updatedLocation = {
+      ...location,
+      revision: (location.revision ?? 0) + 1,
+      syncStatus: 'local' as const,
+      updatedAt: now,
+    };
+    await putLocation(updatedLocation);
+  },
+
+  async saveMediaWithWork(media: MediaAsset[], workId: string): Promise<void> {
+    const db = await getDB();
+    const tx = db.transaction(['media', 'works'], 'readwrite');
+    
+    // 更新作品的媒体数量
+    const work = await tx.objectStore('works').get(workId) as Work | undefined;
+    if (work) {
+      await tx.objectStore('works').put({
+        ...work,
+        mediaCount: media.length,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    
+    // 保存媒体
+    for (const m of media) {
+      await tx.objectStore('media').put(m);
+    }
+    
+    await tx.done;
+    bump();
+  },
+
+  async clearDemoAndReset(): Promise<void> {
+    await clearDemoData();
+    await setMeta('demo_seeded', 'true');
+  },
+};
