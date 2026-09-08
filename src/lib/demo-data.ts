@@ -1,5 +1,4 @@
 import type { WorkWithRelations, Location, FacetValue, MediaAsset } from './types';
-import { generateId } from './utils';
 import { STYLE_OPTIONS, COMPOSITION_OPTIONS } from './facet-config';
 
 const LOCATIONS_DATA: Array<{ name: string; country: string; province: string; city: string; area: string }> = [

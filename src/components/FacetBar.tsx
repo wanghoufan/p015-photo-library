@@ -1,4 +1,4 @@
-import { cn, getOrientationLabel } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 import type { ActiveFilters, Orientation } from '@/lib/types';
 import { STYLE_OPTIONS, COMPOSITION_OPTIONS } from '@/lib/facet-config';
 

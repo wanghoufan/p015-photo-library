@@ -24,8 +24,6 @@ export function Gallery() {
   const navigate = useNavigate();
   const [lightboxWork, setLightboxWork] = useState<WorkWithRelations | null>(null);
 
-  const allMedia = filteredWorks.flatMap(w => w.media.map(m => ({ ...m, workTitle: w.title })));
-
   const facetCounts = useMemo(() => computeFacetCounts(works, filters), [works, filters]);
   const locationCounts = useMemo(() => computeLocationCounts(works, filters, locations.map(l => l.id)), [works, filters, locations]);
 

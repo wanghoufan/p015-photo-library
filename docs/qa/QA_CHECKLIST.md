@@ -4,9 +4,9 @@
 > 新功能见末尾 L8。
 
 ## L0: 代码质量
-- [x] TypeScript 类型检查通过 (`pnpm ts-check`)
-- [ ] ESLint 通过 (`pnpm lint`)（2026-09-08：剩 4 个历史 `unused-vars`，见 BUGS）
-- [x] 构建成功 (`pnpm build`)
+- [x] TypeScript 类型检查通过 (`pnpm ts-check`) — 2026-09-08 复测通过
+- [x] ESLint 通过 (`pnpm lint:build`) — 2026-09-08 修复 4 处 unused-vars 后 0 error
+- [x] 构建成功 (`pnpm build`) — 2026-09-08 复测通过（Vite 1.56s + tsup 19.77KB）
 - [x] 无 console.error 运行时错误（多次控制台读取为空）
 
 ## L1: 画廊页

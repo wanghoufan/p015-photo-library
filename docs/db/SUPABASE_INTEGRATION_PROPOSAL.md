@@ -39,12 +39,9 @@
 - Supabase 结构/数据导出到 `DockerBackups/photo-library/`
 - 不进 Git
 
-## 未验证项
-- [ ] Schema 创建
-- [ ] Expose 配置
-- [ ] GRANT 权限
-- [ ] RLS Policy
-- [ ] Storage Bucket
-- [ ] Auth Redirect URL
-- [ ] 跨用户越权测试
-- [ ] 多设备同步测试
+## 验证状态
+- [x] Schema 创建（S1 20260908021427/29 已发布，平台 Local=Remote=10）
+- [x] Expose 配置（S2 匿名 `Accept-Profile` 实测 42501+401，已生效）
+- [x] GRANT / RLS / Storage Bucket（随 S1 一并发布，见审查包增量复审 V1.1）
+- [ ] Auth Redirect URL（待增补 `http://localhost:5000` 与 `http://192.168.31.60:5000`）
+- [ ] 跨用户越权 / 多设备同步（待 L1 人工登录后实测）

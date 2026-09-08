@@ -85,11 +85,6 @@ export function applyFilters(works: WorkWithRelations[], filters: ActiveFilters)
   });
 }
 
-function computeWorkOrientation(work: WorkWithRelations): string | null {
-  if (work.media.length === 0) return null;
-  return work.media[0].orientation;
-}
-
 export function computeFacetCounts(
   works: WorkWithRelations[],
   currentFilters: ActiveFilters,

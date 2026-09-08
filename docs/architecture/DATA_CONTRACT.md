@@ -95,5 +95,6 @@
 - 路径: `<owner_user_id>/<work_id>/<media_id>/display.webp`
 - 缩略图: `<owner_user_id>/<work_id>/<media_id>/thumb.webp`
 
-## 状态: ⏳ 待验证
-以上为设计方案，未连接生产 Supabase。正式 Migration 由共享平台仓库管理。
+## 状态: S1 已发布（2026-09-08，平台侧 Migration 20260908021427/29，Local=Remote=10；S2 已 Expose）
+- 草案位置：`docs/db/drafts/0001_init.pending.sql` 仅草案，不作为执行来源；唯一执行来源为共享平台仓库 Migration。
+- 验证：见 `SUPABASE_INTEGRATION_PROPOSAL.md` 与 `docs/handoff/HANDOFF.md` §1 Supabase 小节。

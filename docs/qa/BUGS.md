@@ -4,12 +4,6 @@
 
 ## 已知问题
 
-### BUG-1: SyncStatus 组件使用 require 动态导入
-- **严重度**: P2
-- **状态**: VERIFY
-- **描述**: `SyncStatus.tsx` 中使用了 `require('@/lib/sync')` 动态导入，应改为静态 import
-- **影响**: 可能在某些构建配置下失败
-
 ### BUG-2: 演示数据使用外部 Unsplash 图片
 - **严重度**: P3
 - **状态**: OPEN
@@ -54,7 +48,7 @@
 - **修复**: 解码失败降级为原文件直存（读尺寸）；彻底读不出则抛可展示错误，UI 逐条显示
 
 ## 已关闭
-- BUG-1: 2026-09-07 复查，`src`/`server`/配置内已无 `require(`，关闭。
+- BUG-1: SyncStatus 曾用 `require('@/lib/sync')`（P2）— 2026-09-07 复查 `src`/`server`/配置内已无 `require(`，关闭。
 
 ### BUG-9: 编辑页直连时表单空（IDB 异步到达晚于首渲染）
 - **严重度**: P1
