@@ -1,6 +1,12 @@
 # Mac Mini Docker 交接 (MAC_MINI_DOCKER_HANDOFF.md)
 
-## 状态: ⏳ 待本地执行
+## 状态: ✅ 已本地验证（2026-09-08，镜像 photo-library:20260908-m4，验完已 down，现场无残留）
+
+## 本次验证证据
+- `docker compose build` 成功（VITE_* 由 `.env.local` 构建期注入）
+- `docker compose up -d` 后容器 `healthy`；宿主 8082：`/healthz` 200、`/` 200、`/find` 200、`/tags` 200
+- 镜像内无 env 文件（`.dockerignore` 生效，exec 实测）
+- 附带修复：builder 加 `apk add --no-cache bash`（BUG-10）；健康检查改 `127.0.0.1`（BUG-11）
 
 ## 项目标识
 - **project_slug**: `photo-library`
