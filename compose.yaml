@@ -14,7 +14,7 @@ services:
     environment:
       - PORT=3000
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/healthz"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/healthz"]
       interval: 30s
       timeout: 3s
       start_period: 5s

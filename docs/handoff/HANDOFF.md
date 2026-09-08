@@ -9,7 +9,12 @@
 - **Git 已干净**：上一会话遗留的 14 个未提交文件已入库为 `52f14f5 feat: M2 本地优先闭环 + 批量导入 + 标签管理 + S1 送审同步`。
   唯一未跟踪文件是 `备份本文件夹.command`（用户个人脚本，不动它）。
 - `.env.local`：`VITE_SUPABASE_URL` 为裸 host、`publishable key` 已填、`PUBLIC_APP_URL` 空。仅公开变量，无私密值。
-- **lint 已通过**：本会话修复 §1 列出的 4 处 `unused-vars` 后，`pnpm lint:build` 0 error，`pnpm ts-check` 通过，`pnpm build` 通过（dev 服务仍在 PID 91258，`/api/health` 200）。
+- **lint 已通过**：`d414c3c` 修完 4 处 `unused-vars` 后，本会话复测 `pnpm lint` 与
+  `pnpm lint:build` 均为 exit=0，`pnpm ts-check` 通过（dev 服务仍在 PID 91258，`/api/health` 200）。
+- **M4 已本地验证通过**（本会话，见 §1）：镜像 `photo-library:20260908-m4` 构建成功；
+  `compose up` 后容器 `healthy`，`/healthz`、`/`、`/find`、`/tags` 全 200；镜像内无 env 文件。
+  修了 2 个 Dockerfile/compose 问题（`apk add bash`、健康检查改 `127.0.0.1`）。
+  验证完已 `compose down`，现场无残留容器。改动未提交：`Dockerfile`、`compose.yaml`。
 
 ## §1 本会话已完成的工作
 
@@ -64,19 +69,32 @@
    - `src/lib/demo-data.ts:2` — `generateId` 定义未用
    - `src/lib/filter-engine.ts:88` — `computeWorkOrientation` 定义未用
    - `src/pages/Gallery.tsx:27` — `allMedia` 赋值未用
-   （修法：确认无外部引用后删定义/删变量即可，预计 5 分钟。未动手，用户叫停。）
+   （修法：确认无外部引用后删定义/删变量即可。后补记：洁癖收口会话已修完，
+   commit `d414c3c`，`pnpm lint:build` exit=0、`ts-check` 通过，本会话复测确认。）
 4. 核对 M4 现状：`Dockerfile`、`compose.yaml`、`server.mjs`（含 `/healthz`）、
    `docker/env.template` **四个文件都已存在**，但从未真实验证
    （`docker build / up / healthz` 一次没跑过）。所以 PLAN M4 仍算未完成。
+   （后补记：本会话已验证通过，见下「M4 本地验证」节。）
+
+### M4 本地验证 ✅（本会话，2026-09-08）
+- 镜像 `photo-library:20260908-m4`：`docker compose build` 成功（VITE_* 由 `.env.local` 注入，
+  仅构建期烘焙，不回显密钥）。
+- 修了 2 个阻塞问题（记 `docs/qa/BUGS.md` BUG-10/BUG-11）：
+  1. `node:22-alpine` 无 bash，`pnpm build`（调 `bash ./scripts/build.sh`）失败 →
+     builder 阶段加 `apk add --no-cache bash`。
+  2. 容器内 `wget localhost` 走 `::1` 被拒（`server.mjs` 只听 `0.0.0.0`），健康检查起不来 →
+     `Dockerfile` HEALTHCHECK 与 `compose.yaml` 健康检查 URL 改 `127.0.0.1`。
+- `compose up -d` 后容器状态 `healthy`；宿主 8082：`/healthz` 200、`/` 200、
+  深路由 `/find` 200、`/tags` 200；`docker exec` 确认镜像内无 env 文件（`.dockerignore` 生效）。
+- 验证完已 `docker compose down`（连带 network 删除），`docker ps` 确认无残留。
+  故意不停留验证容器：容器名 `photo-library` 会和正式部署副本冲突。
+- 待办：`MAC_MINI_DOCKER_HANDOFF.md` 状态翻为已验证（本会话未改，等用户确认改动后一起）；
 
 ## §2 下一步任务（按序）
 
-1. **清 lint（5 分钟，纯本地，无阻塞）**：删 §1 列出的 4 处未用定义/变量，
-   跑 `pnpm lint` + `pnpm ts-check` 双绿。这是恢复开发后的第一锤。
-2. **验证 M4 Docker（需本机 docker）**：`docker build -t photo-library:<tag> .` →
-   `docker compose up -d` → 验 `/healthz` 200 → SPA 深路由刷新不 404。
-   注意 `VITE_*` 改动必须重建镜像。验证通过后把 PLAN M4 打勾，
-   交接 `MAC_MINI_DOCKER_HANDOFF.md` 状态改为已验证。**`docker/` 部署副本未经授权不动。**
+1. **清 lint ✅ 已完成（`d414c3c`，本会话复测 exit=0 + ts-check 通过）**。
+2. **验证 M4 Docker ✅ 已完成（本会话）**：build/up/healthy/healthz/深路由/无env进镜像全过，
+   容器已 down。剩：`MAC_MINI_DOCKER_HANDOFF.md` 状态翻已验证 + PLAN M4 打勾（等用户确认本次改动后一起）。
 3. **Dashboard 补 Redirect URL**（用户/管理员手动）：增补 `http://localhost:5000`、
    `http://192.168.31.60:5000`。完成后复核既有工具登录一次。
 4. **用户在 Orca 内嵌浏览器或本机 Chrome 的本应用 `/me` 点 Google 登录过同意屏**（只能人工），

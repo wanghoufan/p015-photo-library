@@ -41,13 +41,13 @@
 - [ ] Redirect 白名单增补（localhost:5000、192.168.31.60:5000）
 - [ ] L1 真机证据（登录态读写/刷新/revision/清理）
 
-### M4：Docker 与下载交接
-- [ ] Dockerfile
-- [ ] compose.yaml
-- [ ] server.mjs 静态服务
-- [ ] /healthz 健康检查
-- [ ] docker/env.template
-- [ ] MAC_MINI_DOCKER_HANDOFF.md
+### M4：Docker 与下载交接（2026-09-08 本地验证通过，镜像 photo-library:20260908-m4）
+- [x] Dockerfile（含 builder 装 bash 修 BUG-10）
+- [x] compose.yaml（健康检查改 127.0.0.1 修 BUG-11）
+- [x] server.mjs 静态服务
+- [x] /healthz 健康检查（容器 healthy，宿主 8082 实测 200）
+- [x] docker/env.template
+- [ ] MAC_MINI_DOCKER_HANDOFF.md（状态翻已验证，待用户确认本次改动后一起改）
 
 ### M5：独立审查与回归
 - [ ] Code Reviewer 输出 CODE_REVIEW.md

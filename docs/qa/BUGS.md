@@ -56,3 +56,18 @@
 - **描述**: `AddWork` 全用 `useState` 初始值，直连 `/edit/:id` 时既有数据到不了表单，
   提交按钮 permanent disabled
 - **修复**: `seedKey(id+updatedAt)` 到达后回填一次，不覆盖用户输入
+
+### BUG-10: Docker 构建失败（alpine 无 bash）
+- **严重度**: P1
+- **状态**: FIXED (2026-09-08，M4 验证时发现)
+- **描述**: builder 用 `node:22-alpine`，无 bash；`pnpm build` 调 `bash ./scripts/build.sh`，
+  报 `sh: bash: not found`，exit 1
+- **修复**: builder 阶段加 `apk add --no-cache bash`（不动脚本，改动最小）
+
+### BUG-11: 容器健康检查起不来（localhost 解析到 ::1）
+- **严重度**: P2
+- **状态**: FIXED (2026-09-08，M4 验证时发现)
+- **描述**: 容器内 busybox `wget http://localhost:3000/healthz` 走 `::1` 被拒
+  （`server.mjs` 只听 `0.0.0.0`），`FailingStreak` 递增，状态卡 `starting`；
+  宿主 curl 8082 全 200，服务本身正常
+- **修复**: `Dockerfile` HEALTHCHECK 与 `compose.yaml` 健康检查 URL 改 `127.0.0.1`

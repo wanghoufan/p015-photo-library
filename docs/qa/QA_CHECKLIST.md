@@ -5,7 +5,7 @@
 
 ## L0: 代码质量
 - [x] TypeScript 类型检查通过 (`pnpm ts-check`) — 2026-09-08 复测通过
-- [x] ESLint 通过 (`pnpm lint:build`) — 2026-09-08 修复 4 处 unused-vars 后 0 error
+- [x] ESLint 通过 (`pnpm lint` / `pnpm lint:build`) — 2026-09-08 修复 4 处 unused-vars 后 0 error，本会话复测 `pnpm lint` exit=0
 - [x] 构建成功 (`pnpm build`) — 2026-09-08 复测通过（Vite 1.56s + tsup 19.77KB）
 - [x] 无 console.error 运行时错误（多次控制台读取为空）
 
@@ -83,12 +83,12 @@
 - [ ] 地点抽屉（手机端地点筛选入口，待产品拍板）
 - [ ] 年份/方向/收藏摆放（待产品拍板）
 
-## L7: Docker（待本地验证）
-- [ ] 镜像能构建
-- [ ] 容器能启动
-- [ ] /healthz 返回 200
-- [ ] SPA 深层路由刷新不 404
-- [ ] .env 不进入镜像
+## L7: Docker（2026-09-08 本地验证通过，镜像 photo-library:20260908-m4，验完已 down）
+- [x] 镜像能构建
+- [x] 容器能启动（状态 healthy）
+- [x] /healthz 返回 200
+- [x] SPA 深层路由刷新不 404（`/find`、`/tags` 实测 200）
+- [x] .env 不进入镜像（exec 确认 + .dockerignore）
 
 ## 未验证项（2026-09-08）
 - Supabase：S1 已发布，S2 Expose 已生效；待 Redirect 白名单 + L1 登录态证据
