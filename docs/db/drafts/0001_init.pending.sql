@@ -1,5 +1,9 @@
 -- 0001_init.pending.sql
 -- 状态: ⏳ PENDING — 待审核，不是正式 Migration
+-- ⚠️ 已被取代（R1-7，2026-09-07）：以 alw丨数据库管理专家/项目审查丨photo-library/
+-- 下两份 2026-09-07 草案为准（0001 表+RLS、0002 Storage 独立送审）。
+-- 本文件禁止执行，仅留档：含 CHECK 子查询（PG 非法）、缺复合 FK、
+-- media 缺 revision、RLS/GRANT 全注释。
 -- Schema: photo_library
 -- 依赖: auth.users 已存在
 

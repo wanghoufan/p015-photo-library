@@ -1,19 +1,35 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, X, Image as ImageIcon } from 'lucide-react';
-import { useWorkStore } from '@/stores/WorkStore';
+import { useWorkStore, type NewMediaInput } from '@/stores/WorkStore';
 import { STYLE_OPTIONS, COMPOSITION_OPTIONS, COMMON_TAGS } from '@/lib/facet-config';
-import { processImage, createObjectUrl } from '@/lib/image';
-import { cn, generateId, formatDate } from '@/lib/utils';
-import type { MediaAsset, Orientation } from '@/lib/types';
+import { processImage } from '@/lib/image';
+import { cn, generateId } from '@/lib/utils';
+import type { Orientation } from '@/lib/types';
+import { BatchImportPanel } from '@/components/BatchImportPanel';
+
+interface MediaItem {
+  key: string;
+  existingId: string | null;
+  preview: string;
+  file: File | null;
+  thumbBlob: Blob | null;
+  displayBlob: Blob | null;
+  orientation: Orientation;
+  width: number;
+  height: number;
+}
 
 export function AddWork() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getWorkById, addWork, updateWork, locations } = useWorkStore();
+  const { getWorkById, addWork, updateWorkFull, locations } = useWorkStore();
 
+  // 编辑态的既有行来自 store（IDB 异步加载；直连 /edit/:id 时首渲染为空，
+  // 数据到达后用 seedKey 触发一次回填；seedKey 绑定 id+updatedAt，避免覆盖用户输入）
   const existingWork = id ? getWorkById(id) : undefined;
   const isEditing = !!existingWork;
+  const seedKey = existingWork ? `${existingWork.id}:${existingWork.updatedAt}` : 'new';
 
   const [title, setTitle] = useState(existingWork?.title ?? '');
   const [note, setNote] = useState(existingWork?.privateNote ?? '');
@@ -21,46 +37,116 @@ export function AddWork() {
   const [locationId, setLocationId] = useState(existingWork?.locationId ?? '');
   const [newLocationName, setNewLocationName] = useState('');
   const [selectedStyles, setSelectedStyles] = useState<string[]>(
-    existingWork?.facetValues.filter(fv => fv.dimensionId === 'style').map(fv => fv.name) ?? [],
+    existingWork?.facetValues.map(fv => fv.name).filter(n => STYLE_OPTIONS.includes(n)) ?? [],
   );
   const [selectedComps, setSelectedComps] = useState<string[]>(
-    existingWork?.facetValues.filter(fv => fv.dimensionId === 'composition').map(fv => fv.name) ?? [],
+    existingWork?.facetValues.map(fv => fv.name).filter(n => COMPOSITION_OPTIONS.includes(n)) ?? [],
   );
   const [tags, setTags] = useState<string[]>(existingWork?.tags ?? []);
   const [newTag, setNewTag] = useState('');
-  const [mediaItems, setMediaItems] = useState<Array<{ file: File; preview: string; orientation: Orientation; width: number; height: number }>>([]);
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>(() =>
+    (existingWork?.media ?? []).map(m => ({
+      key: `existing-${m.id}`,
+      existingId: m.id,
+      preview: m.displayUrl || m.thumbUrl,
+      file: null,
+      thumbBlob: null,
+      displayBlob: null,
+      orientation: m.orientation,
+      width: m.width,
+      height: m.height,
+    })),
+  );
   const [coverIndex, setCoverIndex] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [fileErrors, setFileErrors] = useState<string[]>([]);
+  // 新增页单张/批量切换（编辑态固定单张）
+  const [batchMode, setBatchMode] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const previewUrlsRef = useRef<Set<string>>(new Set());
+  const seededKeyRef = useRef<string>('new');
+
+  // IDB 数据到达后回填表单（仅 seedKey 变化时，避免覆盖用户输入）
+  useEffect(() => {
+    if (!existingWork || seededKeyRef.current === seedKey) return;
+    seededKeyRef.current = seedKey;
+    setTitle(existingWork.title);
+    setNote(existingWork.privateNote);
+    setShotAt(existingWork.shotAt?.split('T')[0] ?? new Date().toISOString().split('T')[0]);
+    setLocationId(existingWork.locationId);
+    setNewLocationName('');
+    setSelectedStyles(existingWork.facetValues.map(fv => fv.name).filter(n => STYLE_OPTIONS.includes(n)));
+    setSelectedComps(existingWork.facetValues.map(fv => fv.name).filter(n => COMPOSITION_OPTIONS.includes(n)));
+    setTags(existingWork.tags);
+    setMediaItems(existingWork.media.map(m => ({
+      key: `existing-${m.id}`,
+      existingId: m.id,
+      preview: m.displayUrl || m.thumbUrl,
+      file: null,
+      thumbBlob: null,
+      displayBlob: null,
+      orientation: m.orientation,
+      width: m.width,
+      height: m.height,
+    })));
+    setCoverIndex(0);
+  }, [seedKey, existingWork]);
+
+  // 组件卸载时回收本页创建的预览 URL（store 会为入库图片另建 URL）
+  useEffect(() => {
+    const urls = previewUrlsRef.current;
+    return () => {
+      for (const url of urls) {
+        if (url.startsWith('blob:')) {
+          try { URL.revokeObjectURL(url); } catch { /* ignore */ }
+        }
+      }
+      urls.clear();
+    };
+  }, []);
 
   const handleFileSelect = useCallback(async (files: FileList | null) => {
     if (!files) return;
     setIsProcessing(true);
-    const newItems: typeof mediaItems = [];
+    setFileErrors([]);
+    const newItems: MediaItem[] = [];
+    const errors: string[] = [];
 
     for (const file of Array.from(files)) {
-      if (!file.type.startsWith('image/')) continue;
+      if (!file.type.startsWith('image/') && file.type !== '') continue;
       try {
         const result = await processImage(file);
-        const preview = createObjectUrl(result.thumbBlob);
+        const preview = URL.createObjectURL(result.thumbBlob);
+        previewUrlsRef.current.add(preview);
         newItems.push({
-          file,
+          key: `new-${generateId()}`,
+          existingId: null,
           preview,
+          file,
+          thumbBlob: result.thumbBlob,
+          displayBlob: result.displayBlob,
           orientation: result.orientation,
           width: result.width,
           height: result.height,
         });
-      } catch {
-        // skip invalid files
+      } catch (err) {
+        errors.push(err instanceof Error ? err.message : `无法读取「${file.name}」`);
       }
     }
 
     setMediaItems(prev => [...prev, ...newItems]);
+    setFileErrors(errors);
     setIsProcessing(false);
   }, []);
 
   const removeMedia = (index: number) => {
     setMediaItems(prev => {
+      const removed = prev[index];
+      if (removed && removed.preview.startsWith('blob:') && !removed.existingId) {
+        try { URL.revokeObjectURL(removed.preview); } catch { /* ignore */ }
+        previewUrlsRef.current.delete(removed.preview);
+      }
       const next = prev.filter((_, i) => i !== index);
       if (coverIndex >= next.length) setCoverIndex(Math.max(0, next.length - 1));
       return next;
@@ -75,64 +161,78 @@ export function AddWork() {
     setNewTag('');
   };
 
-  const handleSubmit = () => {
-    if (!title.trim() || mediaItems.length === 0) return;
-
-    const effectiveLocationId = locationId || (newLocationName.trim() ? `loc-new-${generateId()}` : '');
-
-    const media: MediaAsset[] = mediaItems.map((item, i) => ({
-      id: `media-${generateId()}`,
-      workId: '',
-      displayUrl: item.preview,
-      thumbUrl: item.preview,
-      mimeType: 'image/webp',
-      byteSize: item.file.size,
-      width: item.width,
-      height: item.height,
-      orientation: item.orientation,
-      sortOrder: i,
-      uploadStatus: 'pending' as const,
-      displayPath: null,
-      thumbPath: null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    }));
-
-    if (isEditing && existingWork) {
-      updateWork(existingWork.id, {
-        title: title.trim(),
-        privateNote: note.trim(),
-        shotAt,
-        locationId: effectiveLocationId,
-        coverMediaId: media[coverIndex]?.id ?? null,
-        mediaCount: media.length,
-        media,
-        facetValues: [
-          ...selectedStyles.map(s => ({ id: `fv-${s}`, dimensionId: 'style', parentId: null, name: s, sortOrder: 0, createdAt: '', updatedAt: '' })),
-          ...selectedComps.map(c => ({ id: `fv-${c}`, dimensionId: 'composition', parentId: null, name: c, sortOrder: 0, createdAt: '', updatedAt: '' })),
-        ],
-        tags,
-      });
-    } else {
-      addWork({
-        title: title.trim(),
-        privateNote: note.trim(),
-        shotAt,
-        locationId: effectiveLocationId,
-        coverMediaId: media[coverIndex]?.id ?? null,
-        isFavorite: false,
-        mediaCount: media.length,
-        location: newLocationName.trim() ? { id: effectiveLocationId, name: newLocationName.trim(), country: '', province: '', city: '', area: '', revision: 1, syncStatus: 'local' as const, isDemo: false, createdAt: '', updatedAt: '' } : null,
-        media,
-        facetValues: [
-          ...selectedStyles.map(s => ({ id: `fv-${s}`, dimensionId: 'style', parentId: null, name: s, sortOrder: 0, createdAt: '', updatedAt: '' })),
-          ...selectedComps.map(c => ({ id: `fv-${c}`, dimensionId: 'composition', parentId: null, name: c, sortOrder: 0, createdAt: '', updatedAt: '' })),
-        ],
-        tags,
-      });
+  // 标题/说明均为可选：标题空则取首图文件名（去扩展名），再空则“未命名作品”
+  const resolvedTitle = (): string => {
+    if (title.trim()) return title.trim();
+    const firstFile = mediaItems.find(m => m.file)?.file;
+    if (firstFile) {
+      const base = firstFile.name.replace(/\.[^.]+$/, '').trim();
+      if (base) return base;
     }
+    return '未命名作品';
+  };
 
-    navigate('/');
+  const canSubmit = mediaItems.length > 0 && !isSaving;
+
+  const handleSubmit = async () => {
+    if (!canSubmit) return;
+    setIsSaving(true);
+    try {
+      const finalTitle = isEditing && existingWork ? (title.trim() || existingWork.title) : resolvedTitle();
+      const newInputs: NewMediaInput[] = [];
+      const keepMediaIds: string[] = [];
+      for (const item of mediaItems) {
+        if (item.existingId) {
+          keepMediaIds.push(item.existingId);
+        }
+      }
+      for (const item of mediaItems) {
+        if (!item.existingId && item.file && item.thumbBlob && item.displayBlob) {
+          newInputs.push({
+            file: item.file,
+            thumbBlob: item.thumbBlob,
+            displayBlob: item.displayBlob,
+            orientation: item.orientation,
+            width: item.width,
+            height: item.height,
+          });
+        }
+      }
+
+      if (isEditing && existingWork) {
+        // 列表顺序恒为“保留（原相对顺序）+ 新增（追加顺序）”，与 store 内
+        // allKeptIds 一致，coverIndex 可直接透传。
+        await updateWorkFull(existingWork.id, {
+          title: finalTitle,
+          privateNote: note.trim(),
+          shotAt,
+          locationId,
+          newLocationName,
+          styles: selectedStyles,
+          comps: selectedComps,
+          tags,
+          media: newInputs,
+          coverIndex,
+          keepMediaIds,
+        });
+      } else {
+        await addWork({
+          title: finalTitle,
+          privateNote: note.trim(),
+          shotAt,
+          locationId,
+          newLocationName,
+          styles: selectedStyles,
+          comps: selectedComps,
+          tags,
+          media: newInputs,
+          coverIndex,
+        });
+      }
+      navigate('/');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -147,15 +247,40 @@ export function AddWork() {
         <h1 className="text-lg font-medium text-gallery-100">
           {isEditing ? '编辑作品' : '添加作品'}
         </h1>
+        {!isEditing && (
+          <div className="ml-auto flex rounded-lg border border-gallery-800 p-0.5 text-xs">
+            <button
+              onClick={() => setBatchMode(false)}
+              className={cn(
+                'rounded-md px-3 py-1.5',
+                !batchMode ? 'bg-gallery-700 text-gallery-100' : 'text-gallery-500 hover:text-gallery-300',
+              )}
+            >
+              单张
+            </button>
+            <button
+              onClick={() => setBatchMode(true)}
+              className={cn(
+                'rounded-md px-3 py-1.5',
+                batchMode ? 'bg-gallery-700 text-gallery-100' : 'text-gallery-500 hover:text-gallery-300',
+              )}
+            >
+              批量导入
+            </button>
+          </div>
+        )}
       </div>
 
+      {batchMode && !isEditing ? <BatchImportPanel /> : (
       <div className="space-y-6">
         {/* Photos */}
         <div>
-          <label className="mb-2 block text-sm font-medium text-gallery-300">照片</label>
+          <label className="mb-2 block text-sm font-medium text-gallery-300">
+            照片 <span className="font-normal text-gallery-600">（可一次多选）</span>
+          </label>
           <div className="flex flex-wrap gap-2">
             {mediaItems.map((item, i) => (
-              <div key={i} className={cn(
+              <div key={item.key} className={cn(
                 'group relative h-20 w-20 overflow-hidden rounded',
                 i === coverIndex && 'ring-2 ring-gallery-400',
               )}>
@@ -196,11 +321,20 @@ export function AddWork() {
             className="hidden"
             onChange={e => handleFileSelect(e.target.files)}
           />
+          {fileErrors.length > 0 && (
+            <div className="mt-2 space-y-1">
+              {fileErrors.map((err, i) => (
+                <p key={i} className="text-xs text-red-400">{err}</p>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Title */}
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-gallery-300">作品名</label>
+          <label className="mb-1.5 block text-sm font-medium text-gallery-300">
+            作品名 <span className="font-normal text-gallery-600">（可选，空则用文件名）</span>
+          </label>
           <input
             type="text"
             value={title}
@@ -212,7 +346,9 @@ export function AddWork() {
 
         {/* Note */}
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-gallery-300">私人说明</label>
+          <label className="mb-1.5 block text-sm font-medium text-gallery-300">
+            私人说明 <span className="font-normal text-gallery-600">（可选）</span>
+          </label>
           <textarea
             value={note}
             onChange={e => setNote(e.target.value)}
@@ -345,13 +481,14 @@ export function AddWork() {
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!title.trim() || mediaItems.length === 0}
+            disabled={!canSubmit}
             className="flex-1 rounded-lg bg-gallery-200 py-2.5 text-sm font-medium text-gallery-900 hover:bg-gallery-300 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isEditing ? '保存修改' : '添加作品'}
+            {isSaving ? '保存中…' : isEditing ? '保存修改' : '添加作品'}
           </button>
         </div>
       </div>
+      )}
     </div>
   );
 }

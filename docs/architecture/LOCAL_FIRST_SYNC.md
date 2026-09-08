@@ -13,12 +13,12 @@
 ```
 
 ## IndexedDB Stores
-- works, media, locations, facet_dimensions, facet_values, work_facet_values, outbox, meta
+- works, media, media_blobs（二进制与行分离，DB v2+）, locations, facet_dimensions, facet_values, work_facet_values, outbox, meta
 
 ## 关键规则
 1. 新建和编辑先写 IndexedDB，UI 立即可见
 2. 离线状态可以添加、编辑和浏览已缓存作品
-3. 联网后由 outbox 逐条推送
+3. 登录 + 联网后由 outbox 逐条推送（未登录只排队不推送）；图片先传 Storage blob 再建行
 4. 每个操作具备稳定幂等 ID
 5. 不允许整库覆盖
 6. 同步失败保留任务、错误和重试次数

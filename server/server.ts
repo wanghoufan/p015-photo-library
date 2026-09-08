@@ -36,8 +36,9 @@ async function startServer(): Promise<Server> {
   // 集成 Vite（开发模式）或静态文件服务（生产模式）
   await setupVite(app);
 
-  // 全局错误处理
-  app.use((err: Error, req: express.Request, res: express.Response) => {
+  // 全局错误处理（Express 要求 4 参数签名才能识别为错误中间件）
+  app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    void _next;
     console.error('Server error:', err);
     const status = 'status' in err ? (err as { status?: number }).status ?? 500 : 500;
     res.status(status).json({

@@ -5,17 +5,24 @@ import type { Application, Request, Response } from 'express';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { createServer as createViteServer } from 'vite';
-import viteConfig from '../vite.config';
 
 const isDev = process.env.COZE_PROJECT_ENV !== 'PROD';
 
+// 注意：vite 及根 vite.config 只在开发环境需要，必须延迟动态导入。
+// 若在顶层静态导入，打包后的 dist-server 会在生产启动时直接 require
+// vite/@swc/core 等 dev-only 依赖，在 pnpm 严格 node_modules 下崩溃。
 /**
  * 集成 Vite 开发服务器（中间件模式）
  */
 export async function setupViteMiddleware(app: Application) {
+  const { createServer: createViteServer } = await import('vite');
+  const { default: viteConfig } = await import('../vite.config.js');
+
   const vite = await createViteServer({
     ...viteConfig,
+    // 配置对象已内联传入，禁止 Vite 再从 cwd 二次加载 vite.config.ts
+    //（否则 react() 等插件会被实例化两次，导致 transform 重复执行）
+    configFile: false,
     server: {
       ...viteConfig.server,
       middlewareMode: true,

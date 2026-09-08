@@ -40,9 +40,10 @@ function matchesFacetValues(work: WorkWithRelations, facetKey: string, selectedI
 
   if (def.valueSource.startsWith('facet:')) {
     const dimKey = def.valueSource.replace('facet:', '');
+    // facetSelections 存的是名称（与 UI/URL 一致），此处按名称匹配
     const workValues = work.facetValues
       .filter(fv => fv.dimensionId === dimKey)
-      .map(fv => fv.id);
+      .map(fv => fv.name);
     if (def.operator === 'and') {
       return selectedIds.every(id => workValues.includes(id));
     }

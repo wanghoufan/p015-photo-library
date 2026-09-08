@@ -1,6 +1,10 @@
 # Supabase 接入方案 (SUPABASE_INTEGRATION_PROPOSAL.md)
 
-## 状态: ⏳ 待审核
+## 状态: S1 已发布（2026-09-08；审查结论见 alw 审查目录增量复审 V1.1）
+- 正式 Migration：平台仓库 `20260908021427` / `20260908021429`，Local=Remote=10
+- S2 Expose：匿名 `Accept-Profile` 实测 `42501 + 401`，已生效
+- 待办：Redirect 白名单增补（`http://localhost:5000`、`http://192.168.31.60:5000`）、M2 审查、L1–L5
+- 送审材料：`/Users/zzymima0000/Developer/coding/1.Active/alw丨数据库管理专家/项目审查丨photo-library/`
 
 ## 接入信息
 - **工具名**: 摄影作品库 (photo-library)

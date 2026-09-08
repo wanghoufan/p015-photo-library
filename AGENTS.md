@@ -29,6 +29,8 @@ src/                    # React + TypeScript + Vite 前端源码
 │   ├── AddFAB.tsx
 │   ├── GalleryGrid.tsx
 │   ├── MediaCard.tsx
+│   ├── BatchImportPanel.tsx
+│   ├── TagsPage.tsx → 见 pages/TagsPage.tsx（标签管理页）
 │   ├── Lightbox.tsx
 │   ├── FacetSidebar.tsx
 │   ├── FacetBar.tsx
@@ -40,8 +42,9 @@ src/                    # React + TypeScript + Vite 前端源码
 │   ├── Gallery.tsx     # 画廊首页
 │   ├── Find.tsx        # 筛选与查找
 │   ├── WorkDetail.tsx  # 作品详情
-│   ├── AddWork.tsx     # 添加/编辑作品
-│   └── Me.tsx          # 我的
+│   ├── AddWork.tsx     # 添加/编辑作品（单张 + 批量导入）
+│   ├── TagsPage.tsx    # 标签管理（地点/风格/构图/自定义）
+│   └── Me.tsx          # 我的（含 Google 登录入口）
 ├── stores/             # 状态管理
 │   └── WorkStore.tsx   # 作品数据 Context
 └── hooks/              # 自定义 Hooks（预留）
@@ -107,8 +110,10 @@ scratch/                # 临时文件（不进 Git）
 5. **视觉气质**: 克制、安静、偏私人收藏馆。图片是绝对主角
 6. **禁止**: 蓝紫渐变、超大圆角、AI SaaS 风格、emoji 代替图标
 
-## 常见问题和预防
+## 常见问题和预防（2026-09-08 复核）
 
-- SyncStatus 组件使用了 `require` 动态导入，应改为静态 import
+- ~~SyncStatus 使用 `require` 动态导入~~ 已关闭：全仓无 `require(`（BUG-1）
 - Gallery.tsx 中 debounce 需要正确类型处理
 - 演示数据使用 Unsplash 图片，需要网络访问
+- 换构建/换环境服务后浏览器必须彻底重进（PWA SW 会咬旧包）
+- 5000 端口出现多监听时先 `lsof -ti:5000` 查清再杀（tsx watch 父进程会复活子进程）

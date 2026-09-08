@@ -4,11 +4,18 @@ import { openDB, type IDBPDatabase } from 'idb';
 import type { Work, MediaAsset, Location, FacetDimension, FacetValue, WorkFacetValue, OutboxEntry, AppMeta } from './types';
 
 const DB_NAME = 'photo-library-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
+
+export interface MediaBlobs {
+  id: string; // mediaId
+  thumb: Blob;
+  display: Blob;
+}
 
 interface PhotoLibraryDB {
   works: { key: string; value: Work; indexes: { 'by-location': string; 'by-shot-at': string; 'by-updated-at': string; 'by-demo': boolean } };
   media: { key: string; value: MediaAsset; indexes: { 'by-work': string } };
+  media_blobs: { key: string; value: MediaBlobs };
   locations: { key: string; value: Location; indexes: { 'by-name': string } };
   facet_dimensions: { key: string; value: FacetDimension; indexes: { 'by-key': string } };
   facet_values: { key: string; value: FacetValue; indexes: { 'by-dimension': string } };
@@ -23,7 +30,8 @@ export async function getDB(): Promise<IDBPDatabase<PhotoLibraryDB>> {
   if (dbInstance) return dbInstance;
 
   dbInstance = await openDB<PhotoLibraryDB>(DB_NAME, DB_VERSION, {
-    upgrade(db) {
+    upgrade(db, oldVersion) {
+      if (oldVersion < 1) {
       const worksStore = db.createObjectStore('works', { keyPath: 'id' });
       worksStore.createIndex('by-location', 'locationId');
       worksStore.createIndex('by-shot-at', 'shotAt');
@@ -49,6 +57,13 @@ export async function getDB(): Promise<IDBPDatabase<PhotoLibraryDB>> {
       outboxStore.createIndex('by-processing-at', 'processingAt');
 
       db.createObjectStore('meta', { keyPath: 'key' });
+      }
+      // v2：图片二进制独立仓（与 media 行分离，避免大对象拖慢行遍历）
+      if (oldVersion < 2) {
+        if (!db.objectStoreNames.contains('media_blobs')) {
+          db.createObjectStore('media_blobs', { keyPath: 'id' });
+        }
+      }
     },
   });
 
@@ -133,6 +148,44 @@ export async function putMedia(media: MediaAsset): Promise<void> {
   bump();
 }
 
+export async function deleteMedia(id: string): Promise<void> {
+  const db = await getDB();
+  const tx = db.transaction(['media', 'media_blobs'], 'readwrite');
+  await tx.objectStore('media').delete(id);
+  await tx.objectStore('media_blobs').delete(id);
+  await tx.done;
+  bump();
+}
+
+// Media blobs（二进制与行分离存储）
+export async function getMediaBlob(mediaId: string): Promise<MediaBlobs | undefined> {
+  const db = await getDB();
+  return db.get('media_blobs', mediaId);
+}
+
+export async function putMediaBlob(blobs: MediaBlobs): Promise<void> {
+  const db = await getDB();
+  await db.put('media_blobs', blobs);
+  bump();
+}
+
+export async function deleteMediaBlob(mediaId: string): Promise<void> {
+  const db = await getDB();
+  await db.delete('media_blobs', mediaId);
+  bump();
+}
+
+export async function deleteMediaBlobsByWork(workId: string): Promise<void> {
+  const mediaList = await getMediaByWork(workId);
+  const db = await getDB();
+  const tx = db.transaction('media_blobs', 'readwrite');
+  for (const m of mediaList) {
+    await tx.store.delete(m.id);
+  }
+  await tx.done;
+  bump();
+}
+
 // Locations
 export async function getAllLocations(): Promise<Location[]> {
   const db = await getDB();
@@ -143,6 +196,18 @@ export async function putLocation(location: Location): Promise<void> {
   const db = await getDB();
   await db.put('locations', location);
   bump();
+}
+
+export async function deleteLocation(id: string): Promise<void> {
+  const db = await getDB();
+  await db.delete('locations', id);
+  bump();
+}
+
+// Work-Facet-Values
+export async function getAllWorkFacetValues(): Promise<WorkFacetValue[]> {
+  const db = await getDB();
+  return db.getAll('work_facet_values');
 }
 
 // Facet dimensions
@@ -215,6 +280,19 @@ export async function deleteOutboxEntry(id: string): Promise<void> {
   bump();
 }
 
+// 删除某一实体的全部排队条目（删作品时连带清掉其 media/wfv 的排队项，防止
+// 后续推送已删子行撞云端 FK）
+export async function deleteOutboxByEntity(entityId: string): Promise<void> {
+  const db = await getDB();
+  const tx = db.transaction('outbox', 'readwrite');
+  const index = tx.store.index('by-entity');
+  for await (const cursor of index.iterate(entityId)) {
+    await cursor.delete();
+  }
+  await tx.done;
+  bump();
+}
+
 // Meta
 export async function getMeta(key: string): Promise<string | null> {
   const db = await getDB();
@@ -257,7 +335,9 @@ export async function clearAllData(): Promise<void> {
 }
 
 // ---- Repo 模式：封装业务操作 ----
-// 参考 place-journal 的 repo 模式，提供高层业务接口
+// 本地纪律：revision+1、syncStatus='local'、updatedAt 刷新。
+// 注意：本模块不直接入 outbox（sync.ts 依赖本模块，反向引用会循环），
+// 调用方（WorkStore）在 repo 调用后负责 enqueueOutbox。baseRevision 由调用方维护。
 export const repo = {
   async saveWork(work: Work): Promise<void> {
     const now = new Date().toISOString();

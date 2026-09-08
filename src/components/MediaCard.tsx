@@ -42,7 +42,7 @@ export function MediaCard({ work, aspect = 'natural', onClick, onToggleFavorite 
           </div>
         )}
 
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100 max-lg:opacity-100" />
 
         <button
           onClick={e => { e.stopPropagation(); onToggleFavorite(); }}
@@ -53,16 +53,17 @@ export function MediaCard({ work, aspect = 'natural', onClick, onToggleFavorite 
         </button>
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0 translate-y-full p-3 transition-transform duration-300 group-hover:translate-y-0">
-        <p className="truncate text-sm font-medium text-white">{work.title}</p>
-        <div className="mt-0.5 flex items-center gap-2 text-xs text-white/70">
+      {/* 桌面 hover 显示全部；手机常显日期地点一行（标题/标签仅桌面） */}
+      <div className="absolute bottom-0 left-0 right-0 translate-y-full p-3 transition-transform duration-300 group-hover:translate-y-0 max-lg:translate-y-0 max-lg:p-2">
+        <p className="truncate text-sm font-medium text-white max-lg:hidden">{work.title}</p>
+        <div className="mt-0.5 flex items-center justify-end gap-2 text-xs text-white/70 max-lg:mt-0 max-lg:text-[11px]">
           {work.location && <span className="truncate">{work.location.name}</span>}
-          <span>{formatDate(work.shotAt)}</span>
+          <span className="shrink-0">{formatDate(work.shotAt)}</span>
         </div>
       </div>
 
       {work.tags.length > 0 && (
-        <div className="absolute bottom-2 left-2 right-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="absolute bottom-2 left-2 right-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 max-lg:hidden">
           {work.tags.slice(0, 3).map(tag => (
             <span key={tag} className="rounded bg-black/50 px-1.5 py-0.5 text-[10px] text-white/80">
               {tag}

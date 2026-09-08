@@ -1,20 +1,43 @@
 import { useState, useEffect } from 'react';
-import { Cloud, CloudOff, Database, Download, Trash2, Smartphone, Shield, Info } from 'lucide-react';
+import { Cloud, CloudOff, Database, Download, Trash2, Smartphone, Shield, Info, LogIn, LogOut, User, Tags } from 'lucide-react';
 import { useWorkStore } from '@/stores/WorkStore';
+import { useNavigate } from 'react-router-dom';
 import { getSyncState, subscribeSyncState, retryFailedSync, type SyncState } from '@/lib/sync';
-import { isSupabaseConfigured } from '@/lib/supabase';
+import {
+  isSupabaseConfigured, signInWithGoogle, signOut,
+  onAuthStateChange, currentUserId,
+} from '@/lib/supabase';
 import { formatRelativeTime } from '@/lib/utils';
 
 const APP_VERSION = '0.1.0';
 
 export function Me() {
   const { works, clearDemoData } = useWorkStore();
+  const navigate = useNavigate();
   const [syncState, setSyncState] = useState<SyncState>(getSyncState());
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [uid, setUid] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
-    return subscribeSyncState(setSyncState);
+    const unsubscribeSync = subscribeSyncState(setSyncState);
+    const unsubscribeAuth = onAuthStateChange(setUid);
+    currentUserId().then(setUid).catch(() => undefined);
+    return () => {
+      unsubscribeSync();
+      unsubscribeAuth();
+    };
   }, []);
+
+  const handleSignIn = async () => {
+    setAuthError(null);
+    const result = await signInWithGoogle();
+    if (!result.ok) setAuthError(result.error ?? '登录失败');
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+  };
 
   const demoCount = works.filter(w => w.isDemo).length;
   const realCount = works.length - demoCount;
@@ -25,6 +48,51 @@ export function Me() {
       <h1 className="mb-6 text-xl font-medium text-gallery-100">我的</h1>
 
       <div className="space-y-4">
+        {/* Account */}
+        <section className="rounded-lg border border-gallery-800 bg-gallery-900/50 p-4">
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-medium text-gallery-300">
+            <User className="h-4 w-4" />
+            账号
+          </h2>
+          {!isSupabaseConfigured() ? (
+            <p className="text-xs text-gallery-600">
+              Supabase 未配置，无法登录。配置环境变量后可用 Google 账号登录并同步。
+            </p>
+          ) : uid ? (
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gallery-500">已登录</span>
+                <span className="font-mono text-xs text-gallery-300">
+                  {uid.slice(0, 8)}…{uid.slice(-4)}
+                </span>
+              </div>
+              <button
+                onClick={handleSignOut}
+                className="focus-ring flex w-full items-center justify-center gap-1.5 rounded-lg border border-gallery-700 py-2 text-xs text-gallery-300 hover:bg-gallery-800"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                退出登录
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-xs text-gallery-600">
+                未登录时数据仅保存在本机，登录后自动同步云端。
+              </p>
+              <button
+                onClick={handleSignIn}
+                className="focus-ring flex w-full items-center justify-center gap-1.5 rounded-lg bg-gallery-200 py-2 text-xs font-medium text-gallery-900 hover:bg-gallery-300"
+              >
+                <LogIn className="h-3.5 w-3.5" />
+                Google 登录
+              </button>
+              {authError && (
+                <p className="text-xs text-red-400">{authError}</p>
+              )}
+            </div>
+          )}
+        </section>
+
         {/* Sync Status */}
         <section className="rounded-lg border border-gallery-800 bg-gallery-900/50 p-4">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-medium text-gallery-300">
@@ -97,6 +165,13 @@ export function Me() {
             <button className="focus-ring flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gallery-700 py-2 text-xs text-gallery-300 hover:bg-gallery-800">
               <Download className="h-3.5 w-3.5" />
               导出数据
+            </button>
+            <button
+              onClick={() => navigate('/tags')}
+              className="focus-ring flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gallery-700 py-2 text-xs text-gallery-300 hover:bg-gallery-800"
+            >
+              <Tags className="h-3.5 w-3.5" />
+              标签管理
             </button>
             {demoCount > 0 && (
               <button

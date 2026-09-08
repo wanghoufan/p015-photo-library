@@ -38,6 +38,11 @@ export interface MediaAsset {
   uploadStatus: UploadStatus;
   displayPath: string | null;
   thumbPath: string | null;
+  // M2：行级同步态（与 Work 同纪律；_UPLOAD_ 指 Storage blob，_SYNC_ 指 DB 行）
+  syncStatus?: SyncStatus;
+  baseRevision?: number;
+  revision?: number;
+  isDemo?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -63,6 +68,12 @@ export interface FacetDimension {
   name: string;
   sortOrder: number;
   selectionMode: 'single' | 'multi';
+  // M2：云端同步字段（静态分面种子同样归属到用户，demo 永不上云）
+  owner_user_id?: string;
+  revision?: number;
+  baseRevision?: number;
+  syncStatus?: SyncStatus;
+  isDemo?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -73,6 +84,12 @@ export interface FacetValue {
   parentId: string | null;
   name: string;
   sortOrder: number;
+  // M2：同上
+  owner_user_id?: string;
+  revision?: number;
+  baseRevision?: number;
+  syncStatus?: SyncStatus;
+  isDemo?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -118,8 +135,10 @@ export interface FilterResult {
 export interface OutboxEntry {
   id: string;
   operation: 'create' | 'update' | 'delete';
-  entityType: 'work' | 'media' | 'location' | 'work_facet_value';
+  entityType: 'work' | 'media' | 'location' | 'facet_dimension' | 'facet_value' | 'work_facet_value';
   entityId: string;
+  // M2 约定：create/delete 用 {}；update 用 { baseRevision }。
+  // 行内容推送时从本地 IDB 现读现组装，不快照，避免过期 payload。
   payload: unknown;
   retryCount: number;
   lastError: string | null;

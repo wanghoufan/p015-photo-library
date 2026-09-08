@@ -4,7 +4,7 @@
 
 ## 项目标识
 - **project_slug**: `photo-library`
-- **开发源码**: `/Users/zzymima0000/Developer/coding/1.Active/photo-library/`
+- **开发源码**: `/Users/zzymima0000/Developer/coding/1.Active/ing丨0907photo-library/`
 - **正式部署副本**: `/Users/zzymima0000/Developer/coding/docker/photo-library/`
 - **持久化业务文件**: `/Users/zzymima0000/DockerData/photo-library/`（当前无服务端文件，暂不需要）
 - **备份与恢复演练**: `/Users/zzymima0000/DockerBackups/photo-library/`
@@ -12,7 +12,7 @@
 ## 端口
 - Docker 宿主机: 8082
 - 容器内部: 3000
-- 开发: 5174（本地开发时）
+- 开发: 5000（`pnpm run dev`，本地开发时）
 
 ## 环境变量接口
 ```
