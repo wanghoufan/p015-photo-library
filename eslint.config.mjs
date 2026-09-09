@@ -39,5 +39,7 @@ export default defineConfig([
     'dist-server/**',
     'node_modules/**',
     'scripts/**',
+    // scratch/ 是临时区（不进 Git）：调试探针、一次性脚本放这里，不参与 lint
+    'scratch/**',
   ]),
 ]);

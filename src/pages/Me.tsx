@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { getSyncState, subscribeSyncState, retryFailedSync, type SyncState } from '@/lib/sync';
 import {
   isSupabaseConfigured, signInWithGoogle, signOut,
-  onAuthStateChange, currentUserId,
+  onAuthStateChange, currentUserId, consumeLoginCallback,
 } from '@/lib/supabase';
 import { formatRelativeTime } from '@/lib/utils';
 
@@ -18,11 +18,31 @@ export function Me() {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [uid, setUid] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
-
+  // 防重复点击：OAuth 发起后锁定按钮，避免多次发起覆盖 PKCE verifier 导致交换失败
+  const [authPending, setAuthPending] = useState(false);
   useEffect(() => {
     const unsubscribeSync = subscribeSyncState(setSyncState);
     const unsubscribeAuth = onAuthStateChange(setUid);
     currentUserId().then(setUid).catch(() => undefined);
+    // 回调落在 /me：直接处理；落在 /：读 App 存入的桥
+    try {
+      const bridge = sessionStorage.getItem('auth-callback-msg');
+      if (bridge) {
+        sessionStorage.removeItem('auth-callback-msg');
+        if (bridge !== 'OK') setAuthError(bridge);
+        setAuthPending(false);
+      }
+    } catch {
+      /* sessionStorage 不可用时忽略 */
+    }
+    consumeLoginCallback().then((r) => {
+      if (r.status === 'error') {
+        setAuthError(`登录回调失败：${r.message}`);
+        setAuthPending(false);
+      } else if (r.status === 'ok') {
+        setAuthPending(false);
+      }
+    });
     return () => {
       unsubscribeSync();
       unsubscribeAuth();
@@ -30,9 +50,25 @@ export function Me() {
   }, []);
 
   const handleSignIn = async () => {
+    if (authPending) return;
+    setAuthPending(true);
     setAuthError(null);
-    const result = await signInWithGoogle();
-    if (!result.ok) setAuthError(result.error ?? '登录失败');
+    try {
+      const result = await signInWithGoogle();
+      if (!result.ok) {
+        setAuthError(result.error ?? '登录失败');
+        setAuthPending(false);
+        return;
+      }
+      if (result.url) {
+        window.location.href = result.url;
+      } else {
+        setAuthPending(false);
+      }
+    } catch (e) {
+      setAuthError(e instanceof Error ? e.message : String(e));
+      setAuthPending(false);
+    }
   };
 
   const handleSignOut = async () => {
@@ -81,7 +117,8 @@ export function Me() {
               </p>
               <button
                 onClick={handleSignIn}
-                className="focus-ring flex w-full items-center justify-center gap-1.5 rounded-lg bg-gallery-200 py-2 text-xs font-medium text-gallery-900 hover:bg-gallery-300"
+                disabled={authPending}
+                className="focus-ring flex w-full items-center justify-center gap-1.5 rounded-lg bg-gallery-200 py-2 text-xs font-medium text-gallery-900 hover:bg-gallery-300 disabled:opacity-60"
               >
                 <LogIn className="h-3.5 w-3.5" />
                 Google 登录

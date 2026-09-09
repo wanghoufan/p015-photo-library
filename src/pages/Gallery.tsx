@@ -30,7 +30,8 @@ export function Gallery() {
   useEffect(() => {
     const params = filtersToSearchParams(filters);
     const search = params.toString();
-    const newUrl = search ? `/?${search}` : '/';
+    // 保留 hash：OAuth 回调票据可能还在 hash 里，别被筛选条件同步抹掉（BUG-15）
+    const newUrl = (search ? `/?${search}` : '/') + window.location.hash;
     window.history.replaceState(null, '', newUrl);
   }, [filters]);
 

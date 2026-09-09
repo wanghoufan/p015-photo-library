@@ -418,6 +418,18 @@ export async function processOutbox(): Promise<void> {  if (!isSupabaseConfigure
     const entries = await getAllOutboxEntries();
     // 按创建时间排序：保证 dimension → value → wfv、work → media 的依赖顺序
     entries.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+    // BUG-18：回收孤儿条目 —— 同步中途刷新/关页会把 processingAt 留在行上，
+    // 由于下面 `if (entry.processingAt) continue`，该条目会被永久跳过，
+    // pendingCount 卡住不降。超过 60 秒仍"处理中"即视为孤儿，重置后重新参与。
+    const staleBefore = Date.now() - 60_000;
+    for (const entry of entries) {
+      if (entry.processingAt && new Date(entry.processingAt).getTime() < staleBefore) {
+        await putOutboxEntry({ ...entry, processingAt: null });
+        entry.processingAt = null;
+      }
+    }
+
     let successCount = 0;
     let errorCount = 0;
 
@@ -425,8 +437,10 @@ export async function processOutbox(): Promise<void> {  if (!isSupabaseConfigure
       // 跳过正在处理的条目（避免并发）
       if (entry.processingAt) continue;
 
-      // demo 数据永不上云：直接丢弃
-      if (await isDemoEntity(entry)) {
+      // demo 数据永不上云：直接丢弃。
+      // 注意：delete 意图必须跳过此判断 —— 本地行已删除，isDemoEntity 查不到会兜底为 true，
+      // 导致删除永远推不上云端（BUG-17）。
+      if (entry.operation !== 'delete' && await isDemoEntity(entry)) {
         await deleteOutboxEntry(entry.id);
         continue;
       }
@@ -528,6 +542,9 @@ async function processEntry(entry: OutboxEntry, ownerId: string): Promise<void> 
     case 'create': {
       const row = await buildCreateRow(entry, ownerId);
       if (!row) return; // 本地行已删：视为成功消费
+      // BUG-16：works.cover_media_id → media.id 与 media.work_id → works.id 互为外键，
+      // 单表 insert 必然死锁（409 / 23503）。对策：work 先不带封面入库，等 media 落库后回填。
+      if (entry.entityType === 'work') row.cover_media_id = null;
       const { error } = await table(client, tableName).insert(row);
       if (error) {
         if (isDuplicateKeyError(error)) {
@@ -536,6 +553,37 @@ async function processEntry(entry: OutboxEntry, ownerId: string): Promise<void> 
           return;
         }
         throw new Error(error.message);
+      }
+      // media 入云后，若它正是所属作品的封面，回填 works.cover_media_id。
+      // R2-1：必须走 revision 乐观锁（SET cover + revision=base+1 WHERE id+revision=base），
+      // 否则被 enforce_revision_guard 拒（实测 400 P0001 "revision must be old+1"，行原样不动）。
+      if (entry.entityType === 'media') {
+        const media = (await getAllMedia()).find((m) => m.id === entry.entityId);
+        const work = media && !media.isDemo
+          ? (await getAllWorks()).find((w) => w.id === media.workId)
+          : undefined;
+        if (work && !work.isDemo && work.coverMediaId === entry.entityId) {
+          const base = work.revision;
+          const { data: coverData, error: coverError } = await table(client, 'works')
+            .update({ cover_media_id: entry.entityId, revision: base + 1 })
+            .eq('id', work.id)
+            .eq('owner_user_id', ownerId)
+            .eq('revision', base)
+            .select('revision');
+          if (coverError) throw new Error(coverError.message);
+          if (!coverData || coverData.length === 0) {
+            throw new Error('Conflict: revision mismatch - remote has been modified');
+          }
+          // 云端 revision 已 +1，本地必须同步跟上（revision + baseRevision），
+          // 否则后续编辑会以旧 base 更新，必然判冲突。
+          const newRev = (coverData[0] as { revision: number }).revision;
+          await putWork({
+            ...work,
+            revision: newRev,
+            baseRevision: newRev,
+            syncStatus: 'synced',
+          });
+        }
       }
       await markEntitySynced(entry);
       break;
@@ -578,6 +626,17 @@ async function processEntry(entry: OutboxEntry, ownerId: string): Promise<void> 
           .delete().eq('work_id', workId).eq('facet_value_id', facetValueId);
         if (error) throw new Error(error.message);
         break;
+      }
+      // BUG-16 + R2-1：删除作品前先删掉云端关联 media。
+      // 封面不用手工清 —— 由触发器 trg_media_nullify_cover 在删 media 时自动把
+      // works.cover_media_id 置 NULL（并 +1 revision）。手工清反而会被
+      // enforce_revision_guard 拒（删库流程本地行已删，拿不到 base revision）。
+      // 这样也解开了 fk_cover_media / fk_media_work 的连环。
+      if (entry.entityType === 'work') {
+        await table(client, 'media')
+          .delete()
+          .eq('work_id', entry.entityId)
+          .eq('owner_user_id', ownerId);
       }
       const { error } = await table(client, tableName).delete().eq('id', entry.entityId);
       if (error) throw new Error(error.message);
