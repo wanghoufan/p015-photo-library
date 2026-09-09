@@ -1,7 +1,8 @@
 # 开发计划 (PLAN.md)
 
-> 现状快照 2026-09-08：M2 代码完成并送审（待审查结论），S1 已发布，S2 Expose 已生效，
-> L1 待 Redirect 白名单 + 人工登录。细节见 `docs/handoff/HANDOFF.md`。
+> 现状快照 2026-09-09：L1 本地 + 云端读写通过（QA L8），白名单已加；
+> 0003 封面外键复审 CHANGES_REQUIRED，R2-1 已修，R2-2～R2-5 待办（待增量复审）；
+> M2 接线送审结论仍待。细节见 `docs/handoff/HANDOFF.md`。
 
 ## 当前阶段：M2 送审 + L1 待办
 
@@ -31,6 +32,7 @@
 - [x] 同步状态 UI 实时更新（待同步计数 + 登录区）
 - [x] 刷新后本地数据仍存在
 - [x] 批量导入（一图一件 + AI 标签 JSON）+ 标签管理页（地点/风格/构图/自定义）
+- [x] L1 本地 + 云端读写通过（2026-09-09，见 QA L8；修 BUG-15/16/17/18，R2-1 乐观锁）
 - [ ] M2 审查结论（`APPROVED_FOR_EXECUTION` / `CHANGES_REQUIRED` / `BLOCKED`）
 
 ### M3：Supabase 接入（S1 已发布）
@@ -38,8 +40,8 @@
 - [x] photo_library Schema 数据合同
 - [x] S1 审查通过并发布（正式 Migration `20260908021427/29`）
 - [x] S2 Expose 生效（匿名 401 实测）
-- [ ] Redirect 白名单增补（localhost:5000、192.168.31.60:5000）
-- [ ] L1 真机证据（登录态读写/刷新/revision/清理）
+- [x] Redirect 白名单增补（localhost:5000、192.168.31.60:5000，用户已加，curl 302 验证）
+- [x] L1 证据（登录态读写/刷新/revision/清理，本地 + 云端均通过）
 
 ### M4：Docker 与下载交接（2026-09-08 本地验证通过，镜像 photo-library:20260908-m4）
 - [x] Dockerfile（含 builder 装 bash 修 BUG-10）
@@ -47,7 +49,7 @@
 - [x] server.mjs 静态服务
 - [x] /healthz 健康检查（容器 healthy，宿主 8082 实测 200）
 - [x] docker/env.template
-- [ ] MAC_MINI_DOCKER_HANDOFF.md（状态翻已验证，待用户确认本次改动后一起改）
+- [x] MAC_MINI_DOCKER_HANDOFF.md（已验证，`7349155`）
 
 ### M5：独立审查与回归
 - [ ] Code Reviewer 输出 CODE_REVIEW.md

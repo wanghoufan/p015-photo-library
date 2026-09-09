@@ -80,8 +80,45 @@
   切回 `pnpm dev` 后页面仍跑旧包：新代码（含报错红字）永不到达，登录点击"跟没发生一样"。
   教训见 HANDOFF §3 第 1 条，今回是该教训的完整复现。
 - **修复**: chrome://serviceworker-internals 手动 Unregister（自动化点不动 WebUI 按钮）；
-  另在 dev 下放了自注销 `public/sw.js`（TEMP-L1，事后删）；`src/` 无 SW 注册代码，
+  dev 下放过的自注销 `public/sw.js` 已删（目录已移除）；`src/` 无 SW 注册代码，
   dev 下注销后永不复发。
+
+### BUG-13: handleSignIn 无 try/catch（登录失败静默吞）
+- **严重度**: P2
+- **状态**: FIXED（2026-09-08 夜顺手修，已随 `a643929` 入库，保留）
+- **描述**: `signInWithOAuth` 抛错时无任何展示，用户侧"点了没反应"且无从排查
+- **修复**: try/catch → authError 红字（保留，不算 TEMP）
+
+### BUG-14: 桌面 Chrome 程序化跳转被静默吞 → 已结案：环境问题，不是产品 Bug
+- **严重度**: P1（曾阻塞桌面端 L1）
+- **状态**: **RESOLVED / 环境侧**（2026-09-09 上午定案）
+- **结论**: 代码链路 100% 正常，**代码侧零修改**。根因是用户那台 Chrome 实例陈旧：
+  PID 98366，2026-09-01 12:09 启动，连续运行 8 天未重启；期间 Chrome 自动更新，
+  主 binary 已到 `152.0.7977.76` 而 renderer 仍 `152.0.7977.65`（新旧版本混跑），
+  导致跨域程序化导航被静默丢弃（无请求、无报错、无跳转）。
+- **定案证据（干净 Chrome 复现，2026-09-09）**：新建独立 profile 的 Chrome
+  `152.0.7977.83`（CDP 9335，headless）访问同一 dev server 的 `/me`，
+  由 CDP 派发**真实鼠标点击**登录按钮，6 秒内网络链完整且成功离境：
+  1. `REQ yacgnikzvutbpoqvokth.supabase.co/auth/v1/authorize` ×2
+  2. `REQ accounts.google.com/o/oauth2/v2/auth`
+  3. `RES 200 accounts.google.com/v3/signin/identifier`
+  落地 URL = `accounts.google.com/v3/signin/identifier`。
+  同一份代码、同一个 dev server、零改动 → 反证代码无责。
+- **处置**: 用户彻底退出 Chrome（Cmd+Q）后重开即可恢复；或改用全新 profile 实例。
+- **产物**: `scratch/cdp-probe.mjs`（TEMP 探针，gitignored，不进库，用完即删）。
+- **方法论沉淀**: 遇"跳转/导航类灵异现象"，先换**干净浏览器实例**做对照复现，
+  能在一次操作内把"代码问题 / 环境问题"劈开，不要在原浏览器上反复归因。
+- **历史记录（保留备查）**:
+  - 描述：用户 Chrome（含无痕）中，人手点击登录按钮 handler 正常执行
+    （TEMP 诊断：clicks=1，一路到 step=5），`signInWithOAuth` 返回 ok 且带 url，
+    但 `location.assign(url)` 与 `window.location.href = url` 都静默无导航、无报错、无跳转，
+    React 状态完好。服务端已证清白（curl /authorize 正常 302 到 Google）。
+    非 SW（已注销）、非插件（无痕复现）。
+  - 绕行：`skipBrowserRedirect: true` 取 url + 页面内绿色兜底直链（真人点 `<a>`），
+    真机测试优先。相关 TEMP 代码 L1 后清理，见 HANDOFF §2。
+  - QA 回测5：clicks 仍 0；但捕获监听正常（记下了空白点击），第二次误点了画廊筛选——
+    证实"误点致页内乱跳"（此前 /me→/ 之谜即误点画廊导航），并非代码自发导航。
+    窗口前后台乱切也干扰。
 
 ### BUG-15: 登录票据无人消费 → 登录永远不生效（已修）
 - **严重度**: P0（登录链路第二个真因，与 BUG-14 叠加导致"点了没反应"）
@@ -149,10 +186,14 @@
 - **R2-1 修复后验证（干净状态全流程）**：新建 → 云端 `cover` 落定 + `rev=2` ✔ →
   编辑 → `rev=3` ✔ → 删除 → 云端消失 ✔；`pending=0`。
   遗留观察：首跑同步有 1 条失败、重试即成功（疑似 wfv/media 入队顺序），待查。
-- **验证（2026-09-09，干净状态全流程）**：新建 → 云端 `rev=1` ✔ → 编辑 → 云端 `rev=2` ✔ →
-  删除 → 云端消失 ✔；`pending=0`，`lastSuccessAt` 首次有值。
-- **方案 B（schema 层）仍建议提审**：`cover_media_id` 外键改为 `DEFERRABLE INITIALLY DEFERRED`
-  或去掉，可从根上消除这个坑，届时可回退本 workaround。
+  **复现记录（2026-09-09 深夜，0003 上线后发布回报端到端）**：删除环节首跑再次出现
+  `pending=1`（云端 works 已消失、本地行暂留、无错误信息），重试一轮即清（`pending=0`）；
+  本地测试幽灵行已按标题前缀精确清除，用户数据未动。与 OBS-3 同源，收口时查。
+- **验证（2026-09-09 中午，R2-1 修复前口径，留档）**：新建 → 云端 `rev=1` ✔ → 编辑 → 云端 `rev=2` ✔
+  → 删除 → 云端消失 ✔；`pending=0`，`lastSuccessAt` 首次有值。（当时 cover 实际未回填成功，见上方 R2-1 修订段。）
+- **schema 层根治已落地**：0003（DROP `fk_cover_media`，B1）于 2026-09-09 上线
+  （复审 V1.1 `APPROVED_FOR_EXECUTION`，正式 Migration `20260909150053`）；
+  DEFERRABLE 方案已否决（送审 §4）。方案 A 三步写入保留为纵深防御。
 - **复现/取证脚本**: `scratch/cdp-sync-diag.mjs`、`scratch/cdp-cloud.mjs`（TEMP，收口删）。
 - **注意**: `sync.ts` 目前只把错误汇总成 `N items failed`，**具体错误被吞**，
   排查只能靠抓 HTTP 响应体；建议顺手把 detail 落到 `lastErrorMessage`（可见性改进）。
@@ -175,40 +216,3 @@
 - **修复**: 每轮开始先回收 —— `processingAt` 早于 60 秒前的条目重置为 `null`，重新参与同步。
 - **现象佐证**: 残留一条 `work/delete`（retry=0、无错误）却始终 pending=1；
   回收后 `pending=0`、`lastSuccessAt` 首次有值。
-
-### BUG-13: handleSignIn 无 try/catch（登录失败静默吞）
-- **严重度**: P2
-- **状态**: FIXED（2026-09-08 夜，顺手修，未提交）
-- **描述**: `signInWithOAuth` 抛错时无任何展示，用户侧"点了没反应"且无从排查
-- **修复**: try/catch → authError 红字（保留，不算 TEMP）
-
-### BUG-14: 桌面 Chrome 程序化跳转被静默吞 → 已结案：环境问题，不是产品 Bug
-- **严重度**: P1（曾阻塞桌面端 L1）
-- **状态**: **RESOLVED / 环境侧**（2026-09-09 上午定案）
-- **结论**: 代码链路 100% 正常，**代码侧零修改**。根因是用户那台 Chrome 实例陈旧：
-  PID 98366，2026-09-01 12:09 启动，连续运行 8 天未重启；期间 Chrome 自动更新，
-  主 binary 已到 `152.0.7977.76` 而 renderer 仍 `152.0.7977.65`（新旧版本混跑），
-  导致跨域程序化导航被静默丢弃（无请求、无报错、无跳转）。
-- **定案证据（干净 Chrome 复现，2026-09-09）**：新建独立 profile 的 Chrome
-  `152.0.7977.83`（CDP 9335，headless）访问同一 dev server 的 `/me`，
-  由 CDP 派发**真实鼠标点击**登录按钮，6 秒内网络链完整且成功离境：
-  1. `REQ yacgnikzvutbpoqvokth.supabase.co/auth/v1/authorize` ×2
-  2. `REQ accounts.google.com/o/oauth2/v2/auth`
-  3. `RES 200 accounts.google.com/v3/signin/identifier`
-  落地 URL = `accounts.google.com/v3/signin/identifier`。
-  同一份代码、同一个 dev server、零改动 → 反证代码无责。
-- **处置**: 用户彻底退出 Chrome（Cmd+Q）后重开即可恢复；或改用全新 profile 实例。
-- **产物**: `scratch/cdp-probe.mjs`（TEMP 探针，L1 收口时删，见 HANDOFF §3 第 14 条）。
-- **方法论沉淀**: 遇"跳转/导航类灵异现象"，先换**干净浏览器实例**做对照复现，
-  能在一次操作内把"代码问题 / 环境问题"劈开，不要在原浏览器上反复归因。
-- **历史记录（保留备查）**:
-  - 描述：用户 Chrome（含无痕）中，人手点击登录按钮 handler 正常执行
-    （TEMP 诊断：clicks=1，一路到 step=5），`signInWithOAuth` 返回 ok 且带 url，
-    但 `location.assign(url)` 与 `window.location.href = url` 都静默无导航、无报错、无跳转，
-    React 状态完好。服务端已证清白（curl /authorize 正常 302 到 Google）。
-    非 SW（已注销）、非插件（无痕复现）。
-  - 绕行：`skipBrowserRedirect: true` 取 url + 页面内绿色兜底直链（真人点 `<a>`），
-    真机测试优先。相关 TEMP 代码 L1 后清理，见 HANDOFF §2。
-  - QA 回测5：clicks 仍 0；但捕获监听正常（记下了空白点击），第二次误点了画廊筛选——
-    证实"误点致页内乱跳"（此前 /me→/ 之谜即误点画廊导航），并非代码自发导航。
-    窗口前后台乱切也干扰。
