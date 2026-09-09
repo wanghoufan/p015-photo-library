@@ -151,3 +151,4 @@ node-compile-cache/
 .vite/
 .coze-logs
 .codegraph/
+.workbuddy/
