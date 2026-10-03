@@ -156,5 +156,9 @@ node-compile-cache/
 # ORCA 迁移备份（回滚用，勿入库）
 *.旧版-2026-09-29
 
+# 手工备份（勿入库；曾因缺此条把 USER_MODEL_OVERRIDE.md.bak-20260924 混进提交）
+*.bak
+*.bak-*
+
 # 转交材料临时目录（不上传 GitHub，用完清理）
 temp/
