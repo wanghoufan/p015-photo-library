@@ -152,3 +152,9 @@ node-compile-cache/
 .coze-logs
 .codegraph/
 .workbuddy/
+
+# ORCA 迁移备份（回滚用，勿入库）
+*.旧版-2026-09-29
+
+# 转交材料临时目录（不上传 GitHub，用完清理）
+temp/
