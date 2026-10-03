@@ -36,9 +36,14 @@
   - 账本：`docs/model/TASK-MODEL-LOG.jsonl` 追加本轮任务行。
   - **没有新建任何 docs 文档**（README 引用的架构/数据库/部署文档均已存在，不造空文档）。
   - GitHub About 三格已写入（见 §7），未传 `--homepage`。
-- 下一步（Next Single Action）：把本轮改动提交到分支 `docs/readme-and-nav-fix`（**不 push**）；之后另开任务做 OBS-3 的浏览器端到端实测。
+- 下一步（Next Single Action）：另开任务做 OBS-3 的浏览器端到端实测（新建→编辑→删除→刷新，pending 首跑须为 0）。
 - 人要拍什么板（列出来问，不问不许开工）：
-  1. **是否 push**：本轮已按指令完成 commit，**没有 push**。要不要推到 `origin/docs/readme-and-nav-fix`，由用户定。
+  1. **`USER_MODEL_OVERRIDE.md` 是指向仓库外绝对路径的软链**（`4.Templates（PC）/…/USER_MODEL_OVERRIDE.md`），
+     已按现状入库，但在 GitHub 上对任何克隆者都是**断链**。两条路二选一：① 改成实体副本（代价：违反「分工表软链制、
+     禁拷实文件」的项目规矩，母版更新需手动同步）；② 保持软链并接受 GitHub 上不可读（本地不受影响）。
+     **本轮未擅自改动**，等裁决。
+- 提交历史（本轮，见 §9）：`a91714a` README+P2 → `fa3b3d7` 治理规则同步（**非我创建**）→
+  `76427a5` 治理记录入库与事实面对齐 → `cab00fe` OBS-3 修复入库 → neat-freak 收尾。
 - permission_request：写 `README.md` / `README.en.md` / `assets/screenshots/*.png` / `src/lib/demo-data.ts` / `src/components/AppShell.tsx` / `src/pages/Gallery.tsx` / `src/pages/Find.tsx` / `docs/handoff/HANDOFF.md` / `docs/model/TASK-MODEL-LOG.jsonl`（用户本轮明确要求，可写）。
 - 收尾记一笔：README 整改 + P2 修复均已实测收口（README 校验 `DOCUMENTATION_READY (0 warning(s))` exit 0；遮挡检测 36/36 clean；`ts-check`/`lint` exit 0；`check-ledger` `LEDGER-OK`）。临时文件已清（`scratch/` 下截图/测量脚本与 profile 全删）。
 
@@ -164,3 +169,52 @@ Chrome headless 带 `--remote-debugging-port=9222` 常驻 → 用 CDP 逐页 `Pa
 - 数据库月度巡检首次执行（每月 1 次，从未跑）。
 - M5 收口：neat-freak / 经验记录未派；`PLAN.md` 缺「视觉与交互验收标准（AC 编号）+ 关键 AC 集合 + 发布类型」（中央规则新要求，缺了会被判计划缺项）。
 - `docs/pm/PLAN.md` 顶部现状快照停在 2026-09-09，本轮之后需刷新。
+## §9 知识收尾（2026-10-03，neat-freak）
+
+### 9.1 六个事实面状态
+
+| 事实面 | 状态 | 说明 |
+|---|---|---|
+| 代码 | `changed-and-verified` | 本轮改 `AppShell`/`Gallery`/`Find`/`demo-data` + 提交既有 `sync.ts`；ts-check、lint exit 0 |
+| 运行态 | `not-applicable` | 私人自用项目，无生产部署面；只有本机 dev 与自建 Docker |
+| 文档 | `changed-and-verified` | README 中英双语；BUGS.md 补 BUG-19、修 BUG-2；PLAN.md 快照刷新 |
+| 规则 | `verified-current` | AGENTS.md 已含 ORCA 区块；`USER_MODEL_OVERRIDE.md` 此前**不在库**已补入（软链，见待裁决项） |
+| 记忆 | `out-of-scope` | `.workbuddy/` 已被 .gitignore 忽略，不入库，本轮未动 |
+| 工作区 | `changed-and-verified` | 残留已清，见 §9.3 |
+
+### 9.2 一个必须记录的事实：出现非我创建的提交
+
+盘点时发现 `fa3b3d7 chore(governance): 同步 ORCA 治理规则 2026-09-29`，作者时间 11:42:32，
+**落在我分支 `docs/readme-and-nav-fix` 的顶端**，把 32 个治理文件（`docs/roles/`、`docs/sop/`、
+`scripts/model/check-ledger.mjs` 等）一次性提交了。我没有执行这条命令 —— 说明有另一个执行体
+（很可能是治理母版 `scripts/sync-old-projects.sh`）在**同一工作区并发写入**。
+
+**影响**：① 本以为「留给用户决定」的治理文档被它直接入库了；
+② 今后在本仓 commit 前必须先 `git log` 确认 HEAD，**不能假设 HEAD 仍是自己上一次的提交**；
+③ 该提交落在功能分支上而非 main，push main 时会一并带入（内容为治理模板，无业务代码）。
+
+### 9.3 残留清理判定
+
+| 对象 | 判定 | 理由 |
+|---|---|---|
+| `USER_MODEL_OVERRIDE.md.bak-20260924` | **已删** | 全仓零引用的手工备份；且它是「残留」的活样本 —— 差点被 `git add -A` 带走 |
+| `scratch/verify-{detail,home}-20260910.png` | **已删** | `scratch/` 声明为临时文件不进 Git，对应 QA 文档已入库 |
+| `.gitignore` 补 `*.bak` / `*.bak-*` | **已加** | 原规则只挡 `*.旧版-2026-09-29`，缺这条才让上面那份 .bak 有机会混进提交 |
+| `docs/**/*.旧版-2026-09-29`（8 个） | **保留** | .gitignore 已忽略，是治理迁移的回滚用，不是残留 |
+| `.workbuddy/` | **不动** | .gitignore 已忽略，是工具目录非残留 |
+| 4 个根级治理提示词 | **入库保留** | `迁移整理提示词.md` 被 AGENTS.md 引用；其余 3 个是同一套治理工具链配套 |
+| `docs/model/DISPATCH-LOG.jsonl` | **清空为 0 字节** | 原为只有 `_example` 的模板行；本轮零派工，按 AGENTS「首个真实任务前删除示例行」处理 |
+
+### 9.4 复核后判定「未过期、故不改」
+
+- `CLAUDE.md` 的「`pnpm lint:style` 另有 7 项待治」：实测仍**正好 7 errors**，未过期。
+- `CLAUDE.md` 的「`pnpm test` 当前无用例，待补」：与 README「跑不通」口径一致，不是失实。
+
+### 9.5 提交拆分（便于单独回滚）
+
+| commit | 内容 | 备注 |
+|---|---|---|
+| `a91714a` | README 中英双语 + P2 导航遮挡修复 | 本轮 |
+| `fa3b3d7` | ORCA 治理规则同步 | **非我创建**，见 §9.2 |
+| `76427a5` | 治理与项目记录入库 + BUGS/PLAN 事实面对齐 + 残留清理 | 本轮 |
+| `cab00fe` | OBS-3 outbox 排序修复入库 | **单独成一个 commit**，便于未验证代码被独立回滚 |

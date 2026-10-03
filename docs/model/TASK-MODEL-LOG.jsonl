@@ -10,3 +10,4 @@
 {"cost_cny":null,"date":"2026-09-10","escalated":"NO","escalation_reason":null,"model":"opencode-go/muse-spark-1.3-contributor","project":"photo-library","result":"PASS","rework":0,"role":"builder","task":"Storage本地备份与恢复验证","tokens":null}
 {"cost_cny":null,"date":"2026-10-03","escalated":"NO","escalation_reason":null,"model":"本窗口","project":"photo-library","result":"PASS","rework":0,"role":"task-manager","task":"GitHub README 整改 Phase 3-7（截图重取+中英双语+About 三格）","tokens":null}
 {"cost_cny":null,"date":"2026-10-03","escalated":"NO","escalation_reason":null,"model":"本窗口","project":"photo-library","result":"PASS","rework":0,"role":"task-manager","task":"P2 导航遮挡修复（AppShell 顶部偏移 + 工具栏为 FAB 让位）并重取全部截图","tokens":null}
+{"cost_cny":null,"date":"2026-10-03","escalated":"NO","escalation_reason":null,"model":"本窗口","project":"photo-library","result":"PASS","rework":0,"role":"neat-freak","task":"知识收尾：残留清理+事实面对齐+入库治理记录（不派独立 neat-freak 通道，由 TM 自办）","tokens":null}
