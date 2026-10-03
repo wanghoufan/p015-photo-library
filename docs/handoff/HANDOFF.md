@@ -1,108 +1,166 @@
-# 交接文档 (HANDOFF.md)
+# HANDOFF｜交接（暂停/恢复用，先读我）
 
-> 最后更新：2026-09-09 深夜（L1+云端读写收口、0003 一轮复审、neat-freak 对齐后的暂停点）。
-> 结构：§1 当前工作进展 / §2 下一步任务 / §3 注意事项及相关规矩。
-> 下一 Agent 先读 `AGENTS.md` + 本文件，恢复口令见 §2 末尾。
+> 旧版字段（governance-state / Evidence / Human Gate / Promotion / Dispatch ID）已废弃，不填。
+> 上一版（2026-09-09 S1 发布收口）原文已归档到 `docs/handoff/HANDOFF_20260909_S1发布收口.md`，未删。
 
----
+- Captured at（YYYY-MM-DD HH:MM）：2026-10-03 11:05
+- PROJECT_PHASE：DEVELOP（README / 文档整改已完成并落盘；开发本身暂停，OBS-3 仍未实测）
+- PLAN_VERSION：空（本轮无产品计划变更）
+- PLAN_READINESS_SCORE：空
+- PLAN_GATE：IN_PROGRESS
+- DEV_BASELINE：a9bee31（= origin/main，本地仍无领先提交）
+- CHANGE_REQUEST：NONE
+- Stage ID：本阶段叫「README 整改（已完成）+ OBS-3 修复待验证」
+- 剩 P0：
+  1. **`src/lib/sync.ts` 的 OBS-3 修复仍未提交、未实测**（本轮明确不碰，见 §3）。
+  2. **P2 导航遮挡已修完但仍未提交**（见 §8；本轮按用户指令已提交，见下面落盘清单）。
 
-## §1 当前工作进展
-
-### 服务与仓库状态（快照 2026-09-09 深夜）
-
-| 项 | 状态 |
-|---|---|
-| dev 服务 | 5000 端口正常（`pnpm dev`，PID 91258，日志 `/tmp/photo-dev.log`），`/api/health` 200 |
-| 质量门 | `pnpm lint` / `pnpm ts-check` 双绿（2026-09-09 实测） |
-| Git HEAD | `3d356a4`，共 3 笔新提交（**未 push**，等用户口令）：`a643929` fix(auth/sync) 修 5 bug + 清 TEMP、`f224456` docs 同步、`3d356a4` chore gitignore |
-| 未提交改动 | `docs/handoff/HANDOFF.md`、`docs/pm/PLAN.md`、`docs/qa/BUGS.md`、`docs/qa/QA_CHECKLIST.md`（内容为状态同步与对齐，正当改动，**待用户授权后 commit**） |
-| 未跟踪 | `备份本文件夹.command`（用户个人脚本，**不动、不提交**） |
-| TEMP 代码 | **已清零**（`a643929` 已删，grep 无残留） |
-| scratch/ | 6 个 CDP 探针保留（`cdp-probe/status/l1/oauth-trace/cloud/sync-diag.mjs`，gitignored），R2-2～R2-5 可复用，闭环后确认无用即删 |
-| 备份 | `pbackup` 全量 2026-09-09 12:29（399M，校验一致）：`~/Developer/coding/1.Active/临时备份/ing丨0907photo-library` |
-| 文档对齐 | PLAN 快照/M2/M3/M4、QA L5/L8、BUGS 已与代码和运行态对齐；DATA_CONTRACT 与现 schema 一致（FK 仍在，代码层绕行），不动 |
-
-### 里程碑（已完成，按时间序）
-
-1. **M0/M1 工程骨架与可点击体验** ✅：画廊、筛选（分面+URL 同步）、添加/编辑、详情（灯箱）、我的、标签管理页；修 BUG-1～9。
-2. **Supabase S1** ✅ 已发布：复审 V1.1 APPROVED_FOR_EXECUTION，Migration `20260908021427/29`；S2 Expose 生效（匿名 42501+401）。
-3. **M2 同步接线** ✅ 代码完成已入库（`52f14f5`）：sync.ts（snake_case/owner/revision/wfv/Storage，未登录只排队）+ WorkStore 接 IDB/outbox + 批量导入 + `/tags`；**送审结论仍待**；真机证据待补交。
-4. **M4 Docker** ✅（`f1cdf5d` + `7349155`）：镜像 `photo-library:20260908-m4` 容器 healthy，8082 全 200，验完已 down；修 BUG-10/11。
-5. **L1 登录 + 云端读写** ✅（2026-09-09，本轮核心成果）：
-   - **BUG-14 结案（环境侧）**：用户 Chrome（PID 98366）连跑 8 天版本混跑静默吞跨域导航；干净 Chrome + CDP 对照复现一次打通，代码零修改。
-   - **BUG-15（P0）已修**：Google OAuth 回落 implicit flow，票据落 URL hash，被 `Gallery.tsx` 的 `replaceState` 抹掉。修复：`supabase.ts` 模块级 `urlSnapshot` 抢先抓票 + `consumeLoginCallback` 双覆盖 implicit/PKCE + Gallery 保留 hash。
-   - **本地 CRUD P1–P5 全过**（CDP 自动跑，记录在 QA_CHECKLIST L8）。
-   - **BUG-16（P0）已修**：works/media 循环外键死锁（409 23503）。方案 A 三步写入（works 不带封面 → media → 回填封面）。顺带修 **BUG-17**（delete 意图被 isDemoEntity 误吞 → 云端删除"复活"）与 **BUG-18**（processingAt 孤儿卡队列）。
-   - **R2-1 已修（管理员复审抓出的真问题）**：回填封面不带 revision 被 `enforce_revision_guard` 拒（`400 P0001 revision must be old+1`），且只查 error 不查影响行数 → **封面此前从未回填成功**。修复：乐观锁 `UPDATE … WHERE revision=base` + `select('revision')` 验证 0 行即抛 + 本地 revision/baseRevision 同步 +1；删 work 交给触发器 `trg_media_nullify_cover` 自动清封面。
-   - **修复后全流程实测通过**：新建 → 云端 cover 落定 + rev=2 → 编辑 rev=3 → 删除云端消失，`pending=0`。
-   - 硬化保留：try/catch（BUG-13）、防连点 `authPending`、手动交换 + `detectSessionInUrl:false`、回调 error 显性化。
-6. **0003 封面外键治理（R2 已闭环，待管理员增量复审）**：
-   - 送审材料在 `alw丨数据库管理专家/项目审查丨photo-library/`（B1 提案 DROP `fk_cover_media` + DEFERRABLE 否决论证）。
-   - **复审裁决（2026-09-09）：CHANGES_REQUIRED** —— B1 方向可接受，原案不可直接执行。裁决全文见同目录《…增量复审丨0003封面外键丨V1.0.md》。
-   - **R2-1～R2-5 已全项闭环（2026-09-09 晚）**：R2-1 代码（`a643929`，带封面全流程实测）；
-     R2-2 三件套（`verify_0003.sql` + `verify_result_0003.txt`，全新 PG16.15 重跑，T6' 反转/V10/T17/T18 全过，7 个预期 ERROR，T6 移出）；
-     R2-3 送审 §7 六项执行前后清单；R2-4 选型 (a) 软引用 + 巡检（频率/告警/清理人落盘，#7/#10/#12 已标注）；
-     R2-5 草案加固（DO 限定 connamespace、回滚悬空门禁 + NOT VALID→VALIDATE、顺序声明；SHA16 `f50e6b2b9a5cb6a5`）。
-   - **已上线（2026-09-09）**：复审 V1.1 `APPROVED_FOR_EXECUTION`（R2 全项通过、R3-1 关闭、OBS-1～3 转收口）
-     → 正式 Migration `20260909150053`（Local=Remote=11，管理员线上复跑全达标）；
-     **发布后回报完成**（《发布后回报丨0003上线丨photo-library.md》#19：§7.3 端到端 +
-     T17 单条 INSERT 带 cover 全过，终态云端 0/0 零残留）。
-   - 剩余收口（不阻塞）：**巡检首次执行**（§7.5 每月 1 次，下月度例行同步）；OBS-1 ✅ 已回填 QA L8；
-     OBS-2 ✅ BUGS 旧 DEFERRABLE 文案已清；**OBS-3 首跑删除 pending=1 重试即清待查**（当晚复现一次）。
+- 当前 Task（正干到哪）：README 整改 Phase 3～7 已完成并自检通过（`DOCUMENTATION_READY`）；随后按用户指令一并处理了 P2 导航遮挡修复（§8，实测 36/36 clean）。当前在提交阶段。累计打回 0/2。
+- 执行链/Session：本窗口 opencode（无固定 session ID）；恢复时新开窗口即可，续上下文靠本文件。
+- 未闭环评审意见：
+  - **OBS-3 待验证**（旧版遗留，`docs/handoff/HANDOFF_OBS-3-20260910.md`）：首跑删除后 `pending=1`、重试即清。已定位为 outbox 同毫秒 `createdAt` tie 排序随机导致依赖倒序，代码已改（见 §3），**但没跑过真机/浏览器实测，也没送审**。
+  - **数据库月度巡检首次执行待做**（`§7.5`，每月 1 次，从未跑过）。
+  - ~~`/add` 与 `/tags` 顶部标题被 fixed 导航遮挡~~ **已修复（2026-10-03，见 §8）**：实测导航占 `top 0～57px`；不止这两个页面，`/me`、`/`、`/find` 同样中招（`/` 的侧栏「地点」标题与「24 / 24 件作品」计数一直被压在导航下）。
+  - **修复本身暴露一个新遮挡，也已修（见 §8）**：补了顶部偏移后，「24 / 24 件作品」计数下移到 `top 79`，正好撞进 `AddFAB`（`lg:top-20`，占 x 1368～1424 / y 80～136），文字被浮钮压住。教训见 §5 第 16 条。
+- 产品验收（追踪矩阵落点 / 未测 AC / 是否待用户签收）：
+  - 落点：`docs/qa/QA_CHECKLIST.md`（L8 已过）、`docs/qa/BUGS_OBS-3*.md`。
+  - 未测 AC：**OBS-3 修复后的端到端 AC 未测**（新建→编辑→删除→刷新，pending 必须为 0 首跑达成）。
+  - 用户签收：不需要（迭代更新，非首次发布；README 整改也不属产品发布）。
+- docs 落盘清单（本轮新增/改了哪几个文件）：
+  - 改写：`README.md`（旧版 → 新版：顶部语言切换、用途+核心能力+快速开始前置、6 张真实截图、Docker/环境变量/命令/已知限制；删掉失实的「测试：Vitest」，删掉无 LICENSE 文件支撑的「MIT」）。
+  - 新增：`README.en.md`（英文版，事实与中文版一致，非逐字翻译）。
+  - 重截：`assets/screenshots/{gallery,find,mobile,add,tags,me}.png`（6 张全部重截，`brokenImgs=0`）。
+  - 改（用户明确授权的业务代码 1）：`src/lib/demo-data.ts` 的 3 条 404 图片链接替换为已验证 200 的链接，全 24 条现均 200。
+  - 改（用户明确授权的业务代码 2，P2 修复，详见 §8）：`src/components/AppShell.tsx`（`<main>` 加 `lg:pt-14`）、`src/pages/Gallery.tsx` 与 `src/pages/Find.tsx`（顶部工具栏给 `AddFAB` 让位）。
+  - 改：本文件 `docs/handoff/HANDOFF.md`。
+  - 账本：`docs/model/TASK-MODEL-LOG.jsonl` 追加本轮任务行。
+  - **没有新建任何 docs 文档**（README 引用的架构/数据库/部署文档均已存在，不造空文档）。
+  - GitHub About 三格已写入（见 §7），未传 `--homepage`。
+- 下一步（Next Single Action）：把本轮改动提交到分支 `docs/readme-and-nav-fix`（**不 push**）；之后另开任务做 OBS-3 的浏览器端到端实测。
+- 人要拍什么板（列出来问，不问不许开工）：
+  1. **是否 push**：本轮已按指令完成 commit，**没有 push**。要不要推到 `origin/docs/readme-and-nav-fix`，由用户定。
+- permission_request：写 `README.md` / `README.en.md` / `assets/screenshots/*.png` / `src/lib/demo-data.ts` / `src/components/AppShell.tsx` / `src/pages/Gallery.tsx` / `src/pages/Find.tsx` / `docs/handoff/HANDOFF.md` / `docs/model/TASK-MODEL-LOG.jsonl`（用户本轮明确要求，可写）。
+- 收尾记一笔：README 整改 + P2 修复均已实测收口（README 校验 `DOCUMENTATION_READY (0 warning(s))` exit 0；遮挡检测 36/36 clean；`ts-check`/`lint` exit 0；`check-ledger` `LEDGER-OK`）。临时文件已清（`scratch/` 下截图/测量脚本与 profile 全删）。
 
 ---
 
-## §2 下一步任务（按优先级）
+## §1 恢复读盘（全体系唯一顺序，别乱）
 
-| 级别 | 任务 | 说明 |
+1. `AGENTS.md`；2. 角色卡（`docs/roles/`）；3. 根 `USER_MODEL_OVERRIDE.md`；4. 本 HANDOFF；5. 根 `经验一句话.md`；6. 任务目标放最后。
+   冲突才扩大读。
+
+## §2 本轮产出物（真实存在，可直接用）
+
+### 2.1 真实产品截图（1440×900 桌面；mobile 为 414×896；2026-10-03 全部重截）
+
+| 文件 | 内容 | 备注 |
 |---|---|---|
-| P1 | **OBS-3 查因** | 首跑删除 `pending=1`、重试即清（疑 outbox 内 media/work 删除顺序与 404 处理），当晚 0003 上线后回报时复现一次；查 `sync.ts` processOutbox 删除分支 |
-| **P0** | 文档改动待授权 commit | HANDOFF/PLAN/BUGS/QA_CHECKLIST + 治理目录回报材料（#19），**等用户授权 commit** |
-| P1 | M2 送审结论 | 等 `APPROVED_FOR_EXECUTION` / `CHANGES_REQUIRED` / `BLOCKED`，按结论修；真机证据（M2 接线送审材料标注"真机证据待补"）待补交 |
-| P1 | 遗留观察 | 首跑同步偶发 1 条失败、重试即成功（疑 wfv/media 入队顺序），待查；顺手把 sync.ts 的 `N items failed` 细节落进 `lastErrorMessage` |
-| P1 | L3/L4 + P6 + M5 | 双设备/冲突/断网回放、PWA 安装/离线验证、双账号越权（P6 需第二个 Google 账号）；M5 独立审查（CODE_REVIEW.md、PRODUCT_BACKLOG 正式版），另排期 |
-| P2 | push GitHub | 3 笔提交 + 文档，**等用户说"现在推送"** |
-| P2 | 两个产品决策（等用户拍板） | ① 筛选页地点抽屉做不做；② 年份/方向/收藏放哪（不动/侧栏底/折叠）。**不要顺手替用户做产品决策** |
+| `assets/screenshots/gallery.png` | 画廊首页（瀑布流 + 顶部分面 + 左侧地点栏） | 干净，`brokenImgs=0` |
+| `assets/screenshots/find.png` | 筛选与查找页，**URL 带 `?fav=1&style=风光`** | 干净；带活动筛选条，与主图不重复 |
+| `assets/screenshots/mobile.png` | 移动端画廊（窄屏） | 干净 |
+| `assets/screenshots/add.png` | 添加作品页 | 干净；顶部按导航高度裁掉被遮挡那一行（见「未闭环评审意见」里的 P2） |
+| `assets/screenshots/tags.png` | 标签管理页 | 干净 |
+| `assets/screenshots/me.png` | 我的页（登录入口/同步状态） | 干净 |
 
-> **恢复口令**：用户说「恢复 photo-library 开发」→ 先读 `AGENTS.md` + 本文件，报 §2 第一项现状与第一动作，确认后再动手。
+取证方式（**本轮实测可用**，比 `--screenshot` 稳）：`PORT=5000 pnpm tsx watch server/server.ts` 起 dev →
+Chrome headless 带 `--remote-debugging-port=9222` 常驻 → 用 CDP 逐页 `Page.navigate`、
+轮询到「无『加载中』且所有 `img.complete`」再 `Page.captureScreenshot`。
+踩坑记录：`chrome --headless --screenshot --virtual-time-budget` 会截到「加载中…」的半成品页（本轮第一次就这么废掉了 6 张），别再用。
 
----
+### 2.2 README 整改已完成的准备工作（无需重做）
 
-## §3 注意事项及相关规矩
+- 事实表已从代码/脚本/配置核过：`package.json`（pnpm 9 / React 19 / Vite 7 / 脚本名）、`scripts/dev.sh`（**dev 端口 5000**）、`scripts/start.sh`（生产预览 5000）、`compose.yaml` + `Dockerfile`（**宿主 8082 → 容器 3000**，`/healthz`）、`.env.example`（`VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` 等）、`src/App.tsx`（路由 `/`、`/find`、`/work/:id`、`/add`、`/edit/:id`、`/me`、`/tags`）、`docs/` 目录清单。
+- 未解决的 README 事实问题：`pnpm test` **当前必然失败**（`No test files found`，且 `.gitignore` 里 `*.test.ts`/`*.test.tsx` 被忽略），所以 README **不能声称"测试：Vitest"**；旧 README 有这句，属失实。
 
-### 铁律（违反即翻车）
+## §3 工作区未提交改动（务必先搞清再动）
 
-1. **包管理只用 pnpm**（`preinstall` 有 only-allow 锁）。
-2. **只用 `photo_library` schema**，不碰其他工具的表。
-3. **本地优先**：先写 IndexedDB、UI 立即可见，再由 outbox 推送；**未登录只排队不推送**；**demo 数据永不上云**；批量导入默认一图一件；未知风格/构图名降级为普通标签不丢失。
-4. **commit/push 必须用户明确授权**；push 二次确认口令「现在推送」；用户撤回即停。
-5. **密钥红线**：完整 key/token/code/完整 URL 参数绝不进输出、日志、截图、文档；uid 只许缩写；OAuth error 参数名可示人；验证连通只看状态码/错误码（PGRST125/42501/401/302/23503）。
-6. **Migration 唯一来源是平台仓库**，业务仓只留草案；治理材料唯一位置 `alw丨数据库管理专家/项目审查丨photo-library/`；**未获批准不碰生产库/Dashboard**；红线见接入包 `00_接入指引.md`（页面显示≠云端保存；realtime 只能通知）。
-7. **Docker 规范 V1.1**：`VITE_*` 是构建期烘焙，改了必须重建镜像；`docker/` 部署副本未经授权不动；dev 目录不放生产私密值。
-8. **verify.sql 头部复现命令与 `/t/` 目录约定是审查资产**，改脚本同步改头部；`verify_result.txt` 头时间 + SHA 每次重跑必须刷新。
-9. **产品拍板与独立审查未做前不重构**，不顺手替用户做产品决策。
+`git status` 在本轮开工时共 **45 项**（已跟踪文件被改 + 未跟踪新增）。本轮新增的改动见上面「docs 落盘清单」。重点：
 
-### 技术教训（踩过的坑，别再踩）
+- **`src/lib/sync.ts`（+84/-16）= OBS-3 的修复代码，已写好但未验证**：
+  - `processOutbox()` 排序从「只按 `createdAt`」改为**依赖安全分级**：操作序 `delete(0) → create(1) → update(2)`；create 按父→子（`location → facet_dimension → work → facet_value → media → work_facet_value`）；delete 按子→父；`createdAt` 降为同级 tiebreak。新增 `OP_ORDER` / `CREATE_ENTITY_ORDER` / `DELETE_ENTITY_ORDER` / `outboxRank()`。
+  - 根因注释（代码内已写）：`generateId()` 是 `randomUUID`，IDB `getAll` 按随机主键返回，同毫秒入队的 `createdAt` tie 经稳定排序后**仍是随机序**，依赖后置的条目首跑撞云端 FK/缺行失败，重试自愈 → 表现为「首跑 pending=1、重试即清」。
+  - 顺带加 `failureDetails[]`：逐条记录 `操作 实体 行id 错误码` 进 `lastErrorMessage`（截 500 字），提高 OBS-3 可见性。
+  - **本轮明确不动它**：用户 B 项已定为「只提交 README 相关」，OBS-3 实测另开任务。
+- 其余为治理文档：`AGENTS.md`、`docs/roles/*.md`（8 个角色卡新增/改写）、`docs/qa/QA_CHECKLIST.md`、`docs/handoff/HANDOFF.md`、`.gitignore`；未跟踪新增 `docs/model/`（含 `TASK-MODEL-LOG.jsonl`、`GOVERNANCE-STATE.json`、`DISPATCH-LOG.jsonl`）、各角色卡与模板、`docs/sop/`、`scripts/model/`、根 `USER_MODEL_OVERRIDE.md`、`GOVERNANCE_VERSION`、几个中文提示词 md。
+- **未经用户明确要求，不要 commit、不要 push。**
 
-- **PWA SW 咬旧包**（BUG-12 整晚的教训）：换构建/换环境后浏览器必须彻底重进；`chrome://serviceworker-internals` 按 scope 精确注销；`src/` 无 SW 注册代码，dev 下注销后永不复发。
-- **5000 端口多监听**：先 `lsof -ti:5000` 查清再杀（tsx watch 父进程会复活子进程）；`scripts/dev.sh` 启动前自动清端口。
-- **HMR websocket 连不上是已知现象**（hmr 指云端 6000/443），改完代码手动刷新验证。
-- **OAuth 票据要在模块加载阶段快照**（BUG-15）：任何 `replaceState` 全量覆盖 URL 的组件都是票据杀手；supabase-js 默认 PKCE 不消费 implicit hash；`detectSessionInUrl: false` 维持（避免 supabase 抢先清 URL）。
-- **revision 乐观锁必须验证影响行数**（R2-1）：PostgREST update 后只查 `error` 会吞 0 行失败，必须 `.select()` 后判 `data.length === 0` 即冲突。
-- **PostgREST 单语句事务下 DEFERRABLE 外键无效**：每请求独立事务，延迟约束在语句 COMMIT 即检查——循环外键只能靠调整写入顺序（当前方案 A）或 schema 治理（0003 B1，待批）。
-- **sync.ts 错误可见性差**：只汇总 `N items failed`，具体错误要抓 HTTP 响应体（CDP `Network.getResponseBody`）。
-- **方法论**：遇"跳转/导航类灵异现象"，先换**干净浏览器实例**做对照复现，一次操作劈开代码问题/环境问题（BUG-14 定案法）。
+## §4 演示数据图片链接：3 条 404 已替换（2026-10-03 已闭环）
 
-### 自动化操作教训（CDP / orca）
+原先实测（curl）24 条 Unsplash 图里 **3 条 404**（打开画廊就见破图，README 主图也有黑洞）：
 
-- CDP 直连：Node 22 原生 WebSocket **无 `.on()`，必须 `addEventListener`**；`send()` 返回整条消息取 `.result`；DOM 操作先 `getDocument` → `querySelector` 拿 nodeId；文件 input 用 `DOM.setFileInputFiles`；受控 input 用原型 setter + `dispatchEvent`；图标按钮靠 `aria-label` 定位。现成脚本在 `scratch/cdp-*.mjs`。
-- orca 操作 Chrome 的**写操作不可信**（AX 序号秒级漂移、合成按键无效、AppleScript 连不上多实例）：读树/截屏可靠，读→点零间隔并以回包快照验地址；精密点击优先让人类用键盘。
-- OAuth 铁律：code 只能消费一次；连点会覆盖 PKCE verifier（已有 `authPending` 锁，仍需嘱咐一次只点一下）；同意屏/账号选择只能用户点；Orca 内嵌浏览器与用户 Chrome 的 IndexedDB 不互通。
-- 用户授权操作其桌面 Chrome 用 computer-use（bundleId `com.google.Chrome`）；开 URL 用 `open -a "Google Chrome" <url>`（运行中 Chrome 忽略 `--args`）。
+- ~~`https://images.unsplash.com/photo-1465056836900-8f1e940b3fc8?w=800&q=80`~~ → `photo-1425913397330-cf8af2ff40a1`
+- ~~`https://images.unsplash.com/photo-1518173946687-a9c63de42aff?w=800&q=80`~~ → `photo-1447752875215-b2761acb3c5d`
+- ~~`https://images.unsplash.com/photo-1482685448062-111a9db3e268?w=800&q=80`~~ → `photo-1511497584788-876760111969`
 
-### 环境与协作
+用户已明确授权（拍板 A 项）。替换后逐条复测：**24 条全部 200**，且 `w=400` 缩略图尺寸也返回真实图片字节（曾有候选在 `w=400` 只回 11KB，已弃用）。
 
-- macOS 窗口最小 500px，真 390px 测不了；断点 `lg=1024`。
-- 给人手点的指令要精确到按键；误点导航是常态，诊断行比问"去哪了"可靠；全屏截图（含标签页栏）比单拍页面有用。
-- `.env.local` 只有公开变量（裸 host + publishable key），在 `.gitignore`。
-- 白名单已加：`http://localhost:5000` + `http://192.168.31.60:5000`（curl 302 验证过）。
+## §7 GitHub About 三格（2026-10-03 已写入并回读）
+
+| 格 | 写入前 | 写入后（已回读确认） |
+|---|---|---|
+| Description | `我的摄影作品库 PWA` | `私人自用的摄影作品库 PWA：本地优先存储 + 分面筛选 + Supabase 云同步` |
+| Website | 空 | **仍为空**（按拍板 C：无真实公网站点，不传 `--homepage`，不留占位） |
+| Topics | 无 | `docker, indexeddb, local-first, photo-library, photography, pwa, react, supabase, tailwindcss, typescript, vite` |
+
+回读命令：`gh repo view wanghoufan/p015-photo-library --json description,homepageUrl,repositoryTopics`。
+
+## §8 P2「导航遮挡内容」修复（2026-10-03 已完成并实测）
+
+### 8.1 成因
+
+`PrimaryNavigation` 在 `lg`（≥1024px）断点是 `lg:top-0 lg:h-14`（56px + 1px 边框 = **57px**）的 fixed 浮层，
+但 `AppShell` 的 `<main>` 没有为它预留顶部偏移 —— 内容从 `y=0` 开始，直接被压在导航下面。
+`Gallery`/`Find` 的根容器写的是 `h-[calc(100vh-3.5rem)]`（3.5rem 正好 = 56px = 导航高度），
+说明设计上**本来就预留了这 56px，只是加在了高度里、没加在偏移上**。所以修在 `AppShell` 一处即可。
+
+### 8.2 改动（3 个文件，各一处）
+
+| 文件 | 改动 | 为什么 |
+|---|---|---|
+| `src/components/AppShell.tsx` | `<main>` 加 `lg:pt-14` | 补上 56px 顶部偏移，一次修好全部 6 个页面 |
+| `src/pages/Gallery.tsx` | 顶部工具栏 `xl:px-6` → `xl:pl-6`，并加 `lg:pr-24` | 给 `AddFAB` 让出 72px（`right-4`+`w-14`）+ 间隙 |
+| `src/pages/Find.tsx` | 同上 | 同上 |
+
+⚠️ 改工具栏时踩过一个坑：写成 `... md:px-4 lg:pr-24 xl:px-6` 是**错的** —— `xl:px-6` 与 `lg:pr-24`
+同为 `padding-right`，Tailwind 按断点分层输出、`xl` 层更靠后，会在 ≥1280px 把 `pr-24` 覆盖回 24px，
+等于在宽屏上重新撞上 FAB。必须只覆盖左侧（`xl:pl-6`）。
+
+### 8.3 实测证据（不是目测）
+
+- **遮挡检测**：6 个宽度（1024/1280/1440/1680/1920/414）× 6 个页面（`/`、`/find`、`/add`、`/tags`、`/me`、`/work/:id`）
+  共 36 组，用 `getBoundingClientRect` 逐个文字元素与 nav、FAB 求矩形相交 → **36 组全部 `occludedCount=0`**。
+  窄屏（414）导航在底部，本来就无遮挡，改动前后一致。
+- **横向溢出**：同 24 组 `scrollWidth - clientWidth` 全为 **0**，`lg:pr-24` 没把内容挤出视口。
+- **纵向滚动**：改动前后各量一次（`git stash` 对比）。`/`、`/find` 恒为 0（内容自撑 + `h-[calc(...)]`）不受影响；
+  `/add`、`/tags`、`/me` 各 +56px（本来就比视口高，正常滚动）；`/work/:id` 由 0 变 28px —— 唯一新增的滚动条，
+  属内容高度决定，可接受，不为它加补偿代码。
+- **静态检查**：`pnpm ts-check` exit 0、`pnpm lint` exit 0。
+- **截图**：6 张全部重取，`brokenImgs=0`、`no-overlap`，并逐张目检（`add.png` 的「添加作品」标题与
+  「单张/批量导入」切换、`me.png` 的「我的」标题、`gallery.png` 的「24 / 24 件作品」计数此前均被压住，现已完整可见）。
+
+## §5 注意事项与规矩（本项目特有，踩过的坑）
+
+1. **不要 push**；commit 必须由编排者（task-manager）明确指令 + 指定分支名（外部者分支用 `ext/` 开头）。
+2. **不要碰 secrets**：`.env.local` 未入库；`.env.example` 只有空值；文档里只写变量名与用途，不写真值。
+3. **不要为了让 README 好看而编功能**：README 声称的能力必须能在代码里找到；发现不一致改 README 或报告差异，不擅自补功能。
+4. **5000 端口**：dev / 生产预览都占 5000；`scripts/dev.sh` 会用 `ss` 杀占用进程（**macOS 无 `ss`**，该步骤静默跳过）。多监听时先 `lsof -ti:5000` 查清再杀。
+5. **换构建/换环境后浏览器必须彻底重进**，PWA Service Worker 会咬旧包（这是 P0 级老坑）。
+6. **演示数据依赖网络**（Unsplash），离线环境下画廊图片会空。
+7. **演示数据不上传云端**（`isDemoEntity` 拦截）；这是硬约束，改同步逻辑时别破坏。
+8. **数据库治理材料不在本仓**：唯一位置是另一个库 `alw丨数据库管理专家/项目审查丨photo-library/`（转送清单 #1～#19）；本仓只记结论。
+9. **搜索/截图注意**：项目视觉是「克制、安静、偏私人收藏馆，图片是绝对主角」——禁蓝紫渐变、禁超大圆角、禁 AI SaaS 味、禁 emoji 代图标（README 文案也按这个调子写）。
+10. **`*.test.ts` / `*.test.tsx` 在 `.gitignore` 里**：想补单测得先改 `.gitignore`，否则写了也进不了仓库。
+11. **跨目录禁令**：派 opencode 通道角色时，任务里读写本仓以外目录（如 `/tmp`、`1.Active/`）会被 `external_directory` 权限自动拒且**静默失败**；临时文件放仓内 gitignore 的 `scratch/`。
+12. **不要用 `require(` 动态导入**（BUG-1 已关闭，全仓禁）。
+13. **README 里有两个坑，别再写错**（2026-10-03 实测）：① `pnpm test` 必然失败（无测试文件），不能宣称有测试；② 仓库**没有 LICENSE 文件**，不能写「MIT」。两条都已在新 README 里显式说明为限制。
+14. **`「我的」页的「导出数据」按钮没有 `onClick`**，是纯占位。README 不能宣称有导出/备份功能。
+15. **README 的 `find.png` 用的是带筛选的 URL**（`/find?fav=1&style=风光`）。因为 `/find` 与 `/` 布局几乎相同，不带参数会得到一张和主图重复的图。
+16. **修「被遮挡」类问题时，必须重测整页所有元素，不能只测原来那一个**（2026-10-03 踩中）：补上 `lg:pt-14` 后，`/` 的「24 / 24 件作品」计数下移后**正好撞进 `AddFAB` 浮钮**，这个遮挡原先被导航盖住、根本看不见，是修复把它暴露出来的。判据用矩形相交：`!(a.right<=b.left||a.left>=b.right||a.bottom<=b.top||a.top>=b.bottom)`，见 §8.3。
+17. **改多断点 padding 时注意 Tailwind 分层**：同属性跨断点会按断点层序覆盖，后写的断点赢。`lg:pr-24` + `xl:px-6` = `pr` 在宽屏失效。
+
+## §6 未完成的旧账（跨轮次，别忘）
+
+- M2 审查结论仍待（`APPROVED_FOR_EXECUTION` / `CHANGES_REQUIRED` / `BLOCKED`）。
+- 数据库月度巡检首次执行（每月 1 次，从未跑）。
+- M5 收口：neat-freak / 经验记录未派；`PLAN.md` 缺「视觉与交互验收标准（AC 编号）+ 关键 AC 集合 + 发布类型」（中央规则新要求，缺了会被判计划缺项）。
+- `docs/pm/PLAN.md` 顶部现状快照停在 2026-09-09，本轮之后需刷新。

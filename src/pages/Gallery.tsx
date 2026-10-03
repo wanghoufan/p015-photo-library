@@ -107,7 +107,7 @@ export function Gallery() {
       />
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        <div className="flex items-center gap-3 border-b border-gallery-800 px-3 py-3 md:px-4 xl:px-6">
+        <div className="flex items-center gap-3 border-b border-gallery-800 px-3 py-3 md:px-4 lg:pr-24 xl:pl-6">
           <div className="flex-1">
             <SearchInput value={filters.search} onChange={handleSearch} />
           </div>
