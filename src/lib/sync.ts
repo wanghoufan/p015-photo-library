@@ -416,8 +416,13 @@ export async function processOutbox(): Promise<void> {  if (!isSupabaseConfigure
 
   try {
     const entries = await getAllOutboxEntries();
-    // 按创建时间排序：保证 dimension → value → wfv、work → media 的依赖顺序
-    entries.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    // 依赖安全排序（OBS-3）：操作 delete→create→update，实体按父子依赖分级，
+    // createdAt 只做同级 tiebreak。旧代码只按 createdAt，同毫秒 tie 实为随机序。
+    entries.sort((a, b) => {
+      const [ao, ae, ac] = outboxRank(a);
+      const [bo, be, bc] = outboxRank(b);
+      return ao - bo || ae - be || ac.localeCompare(bc);
+    });
 
     // BUG-18：回收孤儿条目 —— 同步中途刷新/关页会把 processingAt 留在行上，
     // 由于下面 `if (entry.processingAt) continue`，该条目会被永久跳过，
@@ -432,6 +437,7 @@ export async function processOutbox(): Promise<void> {  if (!isSupabaseConfigure
 
     let successCount = 0;
     let errorCount = 0;
+    const failureDetails: string[] = [];
 
     for (const entry of entries) {
       // 跳过正在处理的条目（避免并发）
@@ -474,6 +480,8 @@ export async function processOutbox(): Promise<void> {  if (!isSupabaseConfigure
           lastError: error,
           processingAt: null,
         });
+        // OBS-3 可见性：逐条记录 操作/表/行id/带码错误，落进 lastErrorMessage（截断防刷屏）。
+        failureDetails.push(`${entry.operation} ${entry.entityType} ${entry.entityId}: ${error}`);
         errorCount++;
       }
     }
@@ -485,7 +493,9 @@ export async function processOutbox(): Promise<void> {  if (!isSupabaseConfigure
       pendingCount: remaining.length,
       lastSuccessAt: successCount > 0 ? now : syncState.lastSuccessAt,
       lastErrorAt: errorCount > 0 ? now : syncState.lastErrorAt,
-      lastErrorMessage: errorCount > 0 ? `${errorCount} items failed` : null,
+      lastErrorMessage: errorCount > 0
+        ? `${errorCount} items failed: ${failureDetails.join('; ').slice(0, 500)}`
+        : null,
     });
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
@@ -525,6 +535,52 @@ async function isDemoEntity(entry: OutboxEntry): Promise<boolean> {
   return false;
 }
 
+// OBS-3：outbox 处理顺序必须是依赖安全的，不能只看 createdAt。
+// generateId() = randomUUID，IDB getAll 按主键（随机）返回；同毫秒入队的
+// createdAt tie 经稳定排序后仍是随机序 —— 依赖后置的条目（wfv 在 facet_value
+// 之前、media 在 work 之前）首跑撞云端 FK/缺行失败，重试因依赖已就位而自愈，
+// 表现为“首跑 pending=1、重试即清”。故按（操作→实体）显式分级，createdAt 只做同级 tiebreak。
+const OP_ORDER: Record<OutboxEntry['operation'], number> = { delete: 0, create: 1, update: 2 };
+
+// 同操作内：create 按父→子（dimension→value→wfv，work→media）；
+const CREATE_ENTITY_ORDER: Record<OutboxEntry['entityType'], number> = {
+  location: 0,
+  facet_dimension: 1,
+  work: 2,
+  facet_value: 3,
+  media: 4,
+  work_facet_value: 5,
+};
+
+// delete 按子→父（wfv→media→work，value→dimension），与云端 CASCADE 同向、纵深防御。
+const DELETE_ENTITY_ORDER: Record<OutboxEntry['entityType'], number> = {
+  work_facet_value: 0,
+  media: 1,
+  work: 2,
+  facet_value: 3,
+  facet_dimension: 4,
+  location: 5,
+};
+
+function outboxRank(entry: OutboxEntry): [number, number, string] {
+  const op = OP_ORDER[entry.operation];
+  const entity = entry.operation === 'delete'
+    ? DELETE_ENTITY_ORDER[entry.entityType]
+    : entry.operation === 'create'
+      ? CREATE_ENTITY_ORDER[entry.entityType]
+      : 0;
+  return [op, entity, entry.createdAt];
+}
+
+// PostgREST 错误原样带码抛出（旧代码只传 message，23503/42501/PGRST 等码全丢，
+// lastErrorMessage 只能看到“N items failed”）。code 进 message 正文，UI/日志直接可见。
+function postgrestError(err: { message: string; code?: string | null }): Error {
+  const code = err?.code ?? undefined;
+  const e = new Error(code ? `[${code}] ${err.message}` : err.message);
+  if (code) (e as { code?: string }).code = code;
+  return e;
+}
+
 function isDuplicateKeyError(err: unknown): boolean {
   const code = (err as { code?: string })?.code;
   const message = err instanceof Error ? err.message : String(err);
@@ -542,8 +598,10 @@ async function processEntry(entry: OutboxEntry, ownerId: string): Promise<void> 
     case 'create': {
       const row = await buildCreateRow(entry, ownerId);
       if (!row) return; // 本地行已删：视为成功消费
-      // BUG-16：works.cover_media_id → media.id 与 media.work_id → works.id 互为外键，
-      // 单表 insert 必然死锁（409 / 23503）。对策：work 先不带封面入库，等 media 落库后回填。
+      // BUG-16 注记（0003 后更新）：works.cover_media_id 现为软引用
+      // （0003 已删 fk_cover_media；完整性由应用层 eq(owner)+RLS+每月巡检补偿）。
+      // 历史上它与 media.work_id → works.id 互为外键，单表 insert 必然死锁（409 / 23503）。
+      // null-first 三步写入作为纵深防御保留：work 先不带封面入库，等 media 落库后回填。
       if (entry.entityType === 'work') row.cover_media_id = null;
       const { error } = await table(client, tableName).insert(row);
       if (error) {
@@ -552,7 +610,7 @@ async function processEntry(entry: OutboxEntry, ownerId: string): Promise<void> 
           await markEntitySynced(entry);
           return;
         }
-        throw new Error(error.message);
+        throw postgrestError(error);
       }
       // media 入云后，若它正是所属作品的封面，回填 works.cover_media_id。
       // R2-1：必须走 revision 乐观锁（SET cover + revision=base+1 WHERE id+revision=base），
@@ -570,7 +628,7 @@ async function processEntry(entry: OutboxEntry, ownerId: string): Promise<void> 
             .eq('owner_user_id', ownerId)
             .eq('revision', base)
             .select('revision');
-          if (coverError) throw new Error(coverError.message);
+          if (coverError) throw postgrestError(coverError);
           if (!coverData || coverData.length === 0) {
             throw new Error('Conflict: revision mismatch - remote has been modified');
           }
@@ -594,10 +652,10 @@ async function processEntry(entry: OutboxEntry, ownerId: string): Promise<void> 
         const { workId, facetValueId } = parseWfvEntityId(entry.entityId);
         const delResult = await table(client, tableName)
           .delete().eq('work_id', workId).eq('facet_value_id', facetValueId);
-        if (delResult.error) throw new Error(delResult.error.message);
+        if (delResult.error) throw postgrestError(delResult.error);
         const { error: insertError } = await table(client, tableName)
           .insert(toWorkFacetRow(ownerId, workId, facetValueId));
-        if (insertError && !isDuplicateKeyError(insertError)) throw new Error(insertError.message);
+        if (insertError && !isDuplicateKeyError(insertError)) throw postgrestError(insertError);
         break;
       }
       const baseRevision = (payload.baseRevision as number) ?? 0;
@@ -609,7 +667,7 @@ async function processEntry(entry: OutboxEntry, ownerId: string): Promise<void> 
         .eq('revision', baseRevision)
         .select('revision');
 
-      if (error) throw new Error(error.message);
+      if (error) throw postgrestError(error);
       if (!data || data.length === 0) {
         throw new Error('Conflict: revision mismatch - remote has been modified');
       }
@@ -624,22 +682,32 @@ async function processEntry(entry: OutboxEntry, ownerId: string): Promise<void> 
         const { workId, facetValueId } = parseWfvEntityId(entry.entityId);
         const { error } = await table(client, tableName)
           .delete().eq('work_id', workId).eq('facet_value_id', facetValueId);
-        if (error) throw new Error(error.message);
+        if (error) throw postgrestError(error);
         break;
       }
-      // BUG-16 + R2-1：删除作品前先删掉云端关联 media。
+      // BUG-16 + R2-1：删除作品前先删掉云端关联子行（OBS-3 加固：wfv 显式先删，
+      // 与 CASCADE 同向，防 schema 漂移；media 删除错误不再吞，直接抛）。
       // 封面不用手工清 —— 由触发器 trg_media_nullify_cover 在删 media 时自动把
       // works.cover_media_id 置 NULL（并 +1 revision）。手工清反而会被
       // enforce_revision_guard 拒（删库流程本地行已删，拿不到 base revision）。
-      // 这样也解开了 fk_cover_media / fk_media_work 的连环。
+      // PostgREST 删不存在的行返回成功（0 行），天然幂等，无需判 404。
       if (entry.entityType === 'work') {
-        await table(client, 'media')
+        const { error: wfvError } = await table(client, 'work_facet_values')
           .delete()
           .eq('work_id', entry.entityId)
           .eq('owner_user_id', ownerId);
+        if (wfvError) throw postgrestError(wfvError);
+        const { error: mediaError } = await table(client, 'media')
+          .delete()
+          .eq('work_id', entry.entityId)
+          .eq('owner_user_id', ownerId);
+        if (mediaError) throw postgrestError(mediaError);
       }
-      const { error } = await table(client, tableName).delete().eq('id', entry.entityId);
-      if (error) throw new Error(error.message);
+      const { error } = await table(client, tableName)
+        .delete()
+        .eq('id', entry.entityId)
+        .eq('owner_user_id', ownerId);
+      if (error) throw postgrestError(error);
       break;
     }
   }
