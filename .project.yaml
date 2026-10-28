@@ -2,11 +2,11 @@
 project_id: P015
 name_zh: 摄影图库 PWA
 slug: photo-library
-status: ing
+status: paused
 github: wanghoufan/p015-photo-library
 visibility: public
 created_at: 2026-09-07T00:00:00+08:00  # GitHub 建仓日（回填时取自 API）
-local_path: /Users/zzymima0000/Developer/coding/1.Active/015-ing-photo-library
+local_path: /Users/zzymima0000/Developer/coding/1.Active/015-paused-photo-library
 default_branch: main
 repo_role: primary
 lifecycle: [ing, paused, done, archived]
