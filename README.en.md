@@ -4,6 +4,8 @@ Your photos stop hiding in the camera roll: filter by place, style, and composit
 
 [简体中文](./README.md)
 
+![Photo library gallery with filters](docs/images/gallery.png)
+
 ## What it is
 
 A private photography library PWA for a single owner—mobile first, enhanced on desktop. Photos and tags live on the device by default; cloud sync is an optional one-way backup and never uploads originals.
